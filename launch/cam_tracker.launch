@@ -20,7 +20,7 @@
   <node name="cam_tracker_node" pkg="cam_tracker" type="cam_tracker_node.py" output="screen" 
         respawn="false" launch-prefix="bash -c 'sleep 3; $0 $@' ">
     <!-- YOLO模型参数 -->
-    <param name="model_path" value="/home/micoair/drone_vision_ws/src/cam_tracker/config/yolo11n.pt" />
+    <param name="model_path" value="/home/micoair/drone_vision_ws/src/cam_tracker/models/yolo11n.pt" />
     <param name="confidence_threshold" value="0.25" />
     <param name="device" value="cpu" />
     <param name="show_image" value="true" />
