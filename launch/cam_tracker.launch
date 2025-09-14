@@ -1,4 +1,8 @@
 <launch>
+  <!-- Launch文件参数 -->
+  <arg name="debug" default="false" doc="Enable debug logging" />
+  <arg name="show_image" default="false" doc="Show visualization window" />
+
   <!-- USB摄像头节点 -->
   <node name="usb_cam" pkg="usb_cam" type="usb_cam_node" output="log" respawn="false">
     <param name="video_device" value="/dev/video0" />
@@ -22,8 +26,10 @@
     <!-- YOLO模型参数 -->
     <param name="model_path" value="/home/micoair/drone_vision_ws/src/cam_tracker/models/yolo11n.pt" />
     <param name="confidence_threshold" value="0.25" />
-    <param name="device" value="cpu" />
-    <param name="show_image" value="true" />
+    <param name="show_image" value="$(arg show_image)" default="false" />
+    
+    <!-- 日志控制参数 -->
+    <param name="debug_mode" value="$(arg debug)" default="false" />
     
     <!-- 追踪器参数 -->
     <param name="max_age" value="30" />

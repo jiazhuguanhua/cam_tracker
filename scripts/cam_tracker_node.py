@@ -4,6 +4,7 @@
 """
 ROS节点: 使用YOLO11进行实时目标检测和追踪
 订阅USB摄像头图像，发布检测和追踪结果
+支持通过 /tracker_action 话题控制追踪器的启动和停止
 """
 
 import rospy
@@ -13,7 +14,7 @@ import time
 import os
 from collections import defaultdict
 from sensor_msgs.msg import Image
-from std_msgs.msg import Header
+from std_msgs.msg import Header, Bool
 from cv_bridge import CvBridge, CvBridgeError
 from cam_tracker.msg import Detection, DetectionArray
 
@@ -27,23 +28,20 @@ os.environ['OPENCV_LOG_LEVEL'] = 'ERROR'
 def setup_opencv_logging():
     """安全地设置OpenCV日志级别，兼容不同版本"""
     try:
-        # 获取OpenCV版本
         cv_version = cv2.__version__
         rospy.logdebug(f"OpenCV版本: {cv_version}")
         
-        # OpenCV 4.x版本通常使用数值设置
-        # 0 = SILENT, 1 = FATAL, 2 = ERROR, 3 = WARNING, 4 = INFO, 5 = DEBUG
         if hasattr(cv2, 'setLogLevel'):
             cv2.setLogLevel(2)  # ERROR级别
             rospy.logdebug("使用数值2设置OpenCV日志级别为ERROR")
         else:
             rospy.logwarn("cv2.setLogLevel方法不可用")
-            
-        rospy.loginfo("✅ OpenCV日志级别配置完成")
+        
+        rospy.logdebug("OpenCV日志级别配置完成")
         return True
         
     except Exception as e:
-        rospy.logwarn(f"⚠️ OpenCV日志级别设置失败: {e}")
+        rospy.logwarn(f"OpenCV日志级别设置失败: {e}")
         rospy.logdebug("这不会影响主要功能，但可能会看到OpenCV警告信息")
         return False
 
@@ -52,9 +50,13 @@ class CamTrackerNode:
     def __init__(self):
         # 初始化ROS节点
         rospy.init_node('cam_tracker_node', anonymous=True)
-        rospy.loginfo("="*60)
-        rospy.loginfo("初始化YOLO11多目标追踪节点")
-        rospy.loginfo("="*60)
+        
+        # 设置日志级别
+        self.debug_mode = rospy.get_param('~debug_mode', False)
+        if self.debug_mode:
+            rospy.loginfo("启用调试模式 - 详细日志输出")
+        
+        rospy.loginfo("YOLO11 多目标追踪节点启动")
         
         # 安全地设置OpenCV日志级别
         setup_opencv_logging()
@@ -65,59 +67,44 @@ class CamTrackerNode:
         self.device = rospy.get_param('~device', 'cpu')
         self.show_image = rospy.get_param('~show_image', False)
         
-        rospy.loginfo("节点参数配置:")
-        rospy.loginfo(f"  模型路径: {self.model_path}")
-        rospy.loginfo(f"  置信度阈值: {self.confidence_threshold}")
-        rospy.loginfo(f"  计算设备: {self.device}")
-        rospy.loginfo(f"  显示图像: {self.show_image}")
+        if self.debug_mode:
+            rospy.loginfo("节点参数配置:")
+            rospy.loginfo(f"  模型路径: {self.model_path}")
+            rospy.loginfo(f"  置信度阈值: {self.confidence_threshold}")
+            rospy.loginfo(f"  计算设备: {self.device}")
+            rospy.loginfo(f"  显示图像: {self.show_image}")
+        else:
+            rospy.logdebug("节点参数配置:")
+            rospy.logdebug(f"  模型路径: {self.model_path}")
+            rospy.logdebug(f"  置信度阈值: {self.confidence_threshold}")
+            rospy.logdebug(f"  计算设备: {self.device}")
+            rospy.logdebug(f"  显示图像: {self.show_image}")
         
         # OpenCV bridge
         self.bridge = CvBridge()
         rospy.logdebug("CvBridge初始化完成")
         
+        # 追踪器控制状态
+        self.tracker_enabled = False  # 默认关闭追踪器
+        self.model_loaded = False
+        
         # 初始化模型
         self.model = None
-        
-        rospy.loginfo("-" * 40)
-        rospy.loginfo("开始加载YOLO模型...")
-        
-        try:
-            # 检查模型文件是否存在
-            if not os.path.exists(self.model_path):
-                rospy.logfatal(f"模型文件不存在: {self.model_path}")
-                rospy.signal_shutdown("模型文件不存在")
-                return
-            
-            rospy.loginfo(f"模型文件路径: {self.model_path}")
-            rospy.loginfo(f"模型文件大小: {os.path.getsize(self.model_path) / (1024*1024):.1f} MB")
-            
-            start_time = time.time()
-            self.model = YOLO(self.model_path)
-            load_time = time.time() - start_time
-            
-            rospy.loginfo(f"YOLO模型加载成功! 耗时: {load_time:.2f}秒")
-            rospy.loginfo(f"模型类别数量: {len(self.model.names)}")
-            rospy.logdebug(f"支持的类别: {list(self.model.names.values())}")
-            
-        except Exception as e:
-            rospy.logerr(f"YOLO模型加载失败: {e}")
-            rospy.logfatal("无法加载YOLO模型，节点即将关闭")
-            import traceback
-            rospy.logerr(f"详细错误信息:\n{traceback.format_exc()}")
-            rospy.signal_shutdown("YOLO模型加载失败")
-            return
+        self.init_model()
         
         # 初始化追踪变量
-        rospy.loginfo("-" * 40)
-        rospy.loginfo("初始化追踪系统...")
+        if self.debug_mode:
+            rospy.loginfo("初始化追踪系统...")
+        else:
+            rospy.logdebug("初始化追踪系统...")
         
         self.frame_count = 0
         self.last_time = time.time()
         self.track_history = defaultdict(lambda: [])
-        self.target_id = None  # 存储要追踪的目标ID
-        self.first_frame = True  # 标记是否为第一帧
-        self.show_other_detections = True  # 显示所有检测框
-        self.fps_list = []  # 存储FPS值
+        self.target_id = None
+        self.first_frame = True
+        self.show_other_detections = True
+        self.fps_list = []
         self.total_processing_time = 0.0
         self.max_fps = 0.0
         self.min_fps = float('inf')
@@ -127,29 +114,106 @@ class CamTrackerNode:
         rospy.logdebug(f"显示所有检测框: {self.show_other_detections}")
         
         # ROS话题初始化
-        rospy.loginfo("初始化ROS话题...")
+        rospy.logdebug("初始化ROS话题...")
         self.image_sub = rospy.Subscriber('/usb_cam/image_raw', Image, self.image_callback, queue_size=1)
         self.detection_pub = rospy.Publisher('/yolo_identify', DetectionArray, queue_size=10)
         
-        rospy.loginfo("订阅话题: /usb_cam/image_raw")
-        rospy.loginfo("发布话题: /yolo_identify")
+        # 添加追踪器控制话题
+        self.action_sub = rospy.Subscriber('/tracker_action', Bool, self.tracker_action_callback, queue_size=1)
+        
+        rospy.logdebug("订阅话题: /usb_cam/image_raw")
+        rospy.logdebug("订阅话题: /tracker_action (Bool)")
+        rospy.logdebug("发布话题: /yolo_identify")
         rospy.logdebug(f"图像订阅队列大小: 1")
         rospy.logdebug(f"检测发布队列大小: 10")
         
-        rospy.loginfo("="*60)
-        rospy.loginfo("YOLO11多目标追踪节点启动完成!")
-        rospy.loginfo("等待图像数据...")
-        rospy.loginfo("="*60)
+        rospy.loginfo("追踪器待机中，发送控制信号启动")
+    
+    def init_model(self):
+        """初始化YOLO模型"""
+        rospy.loginfo("加载YOLO模型...")
+        
+        try:
+            if not os.path.exists(self.model_path):
+                rospy.logdebug(f"当前路径: {self.model_path}")
+                rospy.logfatal(f"模型文件不存在: {self.model_path}")
+                rospy.signal_shutdown("模型文件不存在")
+                return
+            
+            rospy.logdebug(f"模型文件路径: {self.model_path}")
+            rospy.logdebug(f"模型文件大小: {os.path.getsize(self.model_path) / (1024*1024):.1f} MB")
+            
+            start_time = time.time()
+            self.model = YOLO(self.model_path)
+            load_time = time.time() - start_time
+            
+            rospy.loginfo(f"模型加载完成，耗时: {load_time:.2f}秒")
+            rospy.logdebug(f"模型类别数量: {len(self.model.names)}")
+            rospy.logdebug(f"支持的类别: {list(self.model.names.values())}")
+            
+            self.model_loaded = True
+            
+        except Exception as e:
+            rospy.logerr(f"YOLO模型加载失败: {e}")
+            rospy.logfatal("无法加载YOLO模型，节点即将关闭")
+            import traceback
+            rospy.logerr(f"详细错误信息:\n{traceback.format_exc()}")
+            rospy.signal_shutdown("YOLO模型加载失败")
+            return
+    
+    def tracker_action_callback(self, msg):
+        """处理追踪器控制命令"""
+        action = msg.data
+        
+        if not self.model_loaded:
+            rospy.logwarn("⚠️ 模型尚未加载完成，无法启动追踪器")
+            return
+            
+        if action and not self.tracker_enabled:
+            # 启动追踪器
+            self.tracker_enabled = True
+            self.first_frame = True
+            self.frame_count = 0
+            self.track_history.clear()
+            self.fps_list.clear()
+            self.total_processing_time = 0.0
+            self.max_fps = 0.0
+            self.min_fps = float('inf')
+            
+            rospy.loginfo("追踪器已启动")
+            
+        elif not action and self.tracker_enabled:
+            # 停止追踪器
+            self.tracker_enabled = False
+            rospy.loginfo("追踪器已停止")
+            
+            # 发布空的检测结果
+            empty_array = DetectionArray()
+            empty_array.header.stamp = rospy.Time.now()
+            empty_array.header.frame_id = "camera"
+            empty_array.total_objects = 0
+            empty_array.processing_time = 0.0
+            self.detection_pub.publish(empty_array)
+            
+        elif action and self.tracker_enabled:
+            rospy.logdebug("追踪器已经在运行中")
+        elif not action and not self.tracker_enabled:
+            rospy.logdebug("追踪器已经处于停止状态")
         
     def image_callback(self, msg):
         """图像回调函数"""
         try:
+            # 检查追踪器是否启用
+            if not self.tracker_enabled:
+                rospy.logdebug("追踪器未启用，跳过图像处理")
+                return
+            
             # 计算FPS
             timer = cv2.getTickCount()
             
             # 第一帧特殊处理
             if self.frame_count == 0:
-                rospy.loginfo("收到第一帧图像数据")
+                rospy.logdebug("收到第一帧图像数据，开始追踪处理")
                 rospy.logdebug(f"图像尺寸: {msg.width}x{msg.height}")
                 rospy.logdebug(f"图像编码: {msg.encoding}")
                 rospy.logdebug(f"图像步长: {msg.step}")
@@ -198,13 +262,13 @@ class CamTrackerNode:
                 avg_fps = sum(self.fps_list[-30:]) / min(30, len(self.fps_list))
                 avg_processing = self.total_processing_time / self.frame_count
                 
-                rospy.loginfo("="*50)
-                rospy.loginfo(f"帧数统计 - 第{self.frame_count}帧")
-                rospy.loginfo(f"  平均FPS: {avg_fps:.1f}")
-                rospy.loginfo(f"  最高FPS: {self.max_fps:.1f}")
-                rospy.loginfo(f"  最低FPS: {self.min_fps:.1f}")
-                rospy.loginfo(f"  平均处理时间: {avg_processing*1000:.1f}ms")
-                rospy.loginfo(f"  当前检测目标数: {len(tracked_objects)}")
+                rospy.logdebug("="*50)
+                rospy.logdebug(f"帧数统计 - 第{self.frame_count}帧")
+                rospy.logdebug(f"  平均FPS: {avg_fps:.1f}")
+                rospy.logdebug(f"  最高FPS: {self.max_fps:.1f}")
+                rospy.logdebug(f"  最低FPS: {self.min_fps:.1f}")
+                rospy.logdebug(f"  平均处理时间: {avg_processing*1000:.1f}ms")
+                rospy.logdebug(f"  当前检测目标数: {len(tracked_objects)}")
                 
                 # 统计各类别目标数量
                 class_counts = {}
@@ -214,11 +278,9 @@ class CamTrackerNode:
                 
                 if class_counts:
                     count_str = ", ".join([f"{cls}: {count}" for cls, count in class_counts.items()])
-                    rospy.loginfo(f"  目标类别统计: {count_str}")
-                else:
-                    rospy.logwarn("  当前帧未检测到任何目标")
+                    rospy.logdebug(f"  目标类别统计: {count_str}")
                 
-                rospy.loginfo("="*50)
+                rospy.logdebug("="*50)
             
         except CvBridgeError as e:
             rospy.logerr(f"图像转换错误: {e}")
@@ -246,12 +308,9 @@ class CamTrackerNode:
             # 第一帧日志
             if self.first_frame and results[0].boxes is not None:
                 boxes = results[0].boxes
-                rospy.loginfo("*" * 40)
-                rospy.loginfo(f"第一帧检测结果:")
-                rospy.loginfo(f"  检测到 {len(boxes)} 个目标")
-                rospy.loginfo(f"  推理耗时: {inference_time*1000:.1f}ms")
-                rospy.loginfo("开始追踪所有目标...")
-                rospy.loginfo("*" * 40)
+                rospy.logdebug("第一帧检测结果:")
+                rospy.logdebug(f"  检测到 {len(boxes)} 个目标，推理耗时: {inference_time*1000:.1f}ms")
+                rospy.logdebug("开始追踪所有目标...")
                 self.first_frame = False
             
             tracked_objects = []
@@ -297,8 +356,7 @@ class CamTrackerNode:
                         rospy.logdebug(f"目标ID {track_id}: {class_name} 置信度:{confidence:.3f} "
                                       f"位置:({x:.0f},{y:.0f}) 轨迹点数:{len(track)}")
                 else:
-                    rospy.logwarn("检测结果中没有追踪ID - 可能是追踪器初始化问题")
-                    rospy.logdebug("尝试重新初始化追踪器...")
+                    rospy.logdebug("检测结果中没有追踪ID - 可能是追踪器初始化问题")
             else:
                 rospy.logdebug("当前帧未检测到任何目标")
             
@@ -308,7 +366,7 @@ class CamTrackerNode:
         except Exception as e:
             rospy.logerr(f"YOLO检测错误: {e}")
             import traceback
-            rospy.logerr(f"检测错误详情:\n{traceback.format_exc()}")
+            rospy.logdebug(f"检测错误详情:\n{traceback.format_exc()}")
             rospy.logwarn("检测失败，返回空结果")
             return []
     
@@ -448,38 +506,35 @@ class CamTrackerNode:
 
 def main():
     try:
-        rospy.loginfo("🚀 正在启动YOLO11追踪节点...")
-        rospy.loginfo(f"ROS节点名称: {rospy.get_name()}")
-        rospy.loginfo(f"ROS命名空间: {rospy.get_namespace()}")
-        
-        # 检查ROS master连接
-
+        rospy.logdebug("启动YOLO11追踪节点...")
+        rospy.logdebug(f"ROS节点名称: {rospy.get_name()}")
+        rospy.logdebug(f"ROS命名空间: {rospy.get_namespace()}")
         
         # 创建节点实例
         node_start_time = time.time()
         node = CamTrackerNode()
         node_init_time = time.time() - node_start_time
         
-        rospy.loginfo(f"✅ 节点初始化完成，耗时: {node_init_time:.2f}秒")
-        rospy.loginfo("🔄 开始监听图像话题，进入主循环...")
+        rospy.logdebug(f"节点初始化完成，耗时: {node_init_time:.2f}秒")
+        rospy.logdebug("开始监听图像话题，进入主循环...")
         
         # 进入ROS主循环
         try:
             rospy.spin()
         except KeyboardInterrupt:
-            rospy.loginfo("🛑 收到键盘中断信号 (Ctrl+C)")
+            rospy.logdebug("键盘中断")
         
     except rospy.ROSInterruptException:
-        rospy.loginfo("🛑 收到ROS中断信号，节点正常退出")
+        rospy.logdebug("收到ROS中断信号，节点正常退出")
     except rospy.ROSException as e:
-        rospy.logerr(f"❌ ROS异常: {e}")
+        rospy.logerr(f"ROS异常: {e}")
         rospy.logfatal("节点因ROS异常而退出")
     except Exception as e:
-        rospy.logerr(f"❌ 节点启动失败: {e}")
+        rospy.logerr(f"节点启动失败: {e}")
         import traceback
-        rospy.logfatal(f"致命错误详情:\n{traceback.format_exc()}")
+        rospy.logdebug(f"致命错误详情:\n{traceback.format_exc()}")
     finally:
-        rospy.loginfo("🧹 开始清理资源...")
+        rospy.logdebug("开始清理资源...")
         
         try:
             cv2.destroyAllWindows()
@@ -487,9 +542,8 @@ def main():
         except:
             pass
             
-        rospy.loginfo("✅ 资源清理完成")
-        rospy.loginfo("👋 YOLO11追踪节点已完全停止")
-        rospy.loginfo("="*60)
+        rospy.logdebug("资源清理完成")
+        rospy.logdebug("cam_tracker node 已停止")
 
 
 if __name__ == '__main__':
