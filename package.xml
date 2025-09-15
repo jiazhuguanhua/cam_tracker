@@ -1,68 +1,203 @@
-<?xml version="1.0"?>
+<?xml version="1.0"?><?xml version="1.0"?><?xml version="1.0"?>
+
 <package format="2">
-  <name>cam_tracker</name>
+
+  <name>cam_tracker</name><package format="2"><package format="2">
+
   <version>0.0.0</version>
+
+  <description>YOLO11 camera tracking package with ByteTrack</description>  <name>cam_tracker</name>  <name>  <build_depend>cv_bridge</build_depend>
+
+
+
+  <maintainer email="micoair@todo.todo">micoair</maintainer>  <version>0.0.0</version>  <build_depend>geometry_msgs</build_depend>
+
+  <license>TODO</license>
+
+  <description>The cam_tracker package</description>  <build_depend>message_generation</build_depend>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <build_depend>cv_bridge</build_depend>  <build_depend>roscpp</build_depend>
+
+  <build_depend>geometry_msgs</build_depend>
+
+  <build_depend>message_generation</build_depend>  <!-- One maintainer tag required, multiple allowed, one person per tag -->  <build_depend>rospy</build_depend>
+
+  <build_depend>roscpp</build_depend>
+
+  <build_depend>rospy</build_depend>  <!-- Example:  -->  <build_depend>sensor_msgs</build_depend>
+
+  <build_depend>sensor_msgs</build_depend>
+
+  <build_depend>std_msgs</build_depend>  <!-- <maintainer email="jane.doe@example.com">Jane Doe</maintainer> -->  <build_depend>std_msgs</build_depend>
+
+  
+
+  <build_export_depend>cv_bridge</build_export_depend>  <maintainer email="micoair@todo.todo">micoair</maintainer>  <build_export_depend>cv_bridge</build_export_depend>
+
+  <build_export_depend>geometry_msgs</build_export_depend>
+
+  <build_export_depend>roscpp</build_export_depend>  <build_export_depend>geometry_msgs</build_export_depend>
+
+  <build_export_depend>rospy</build_export_depend>
+
+  <build_export_depend>sensor_msgs</build_export_depend>  <build_export_depend>roscpp</build_export_depend>
+
+  <build_export_depend>std_msgs</build_export_depend>
+
+    <!-- One license tag required, multiple allowed, one license per tag -->  <build_export_depend>rospy</build_export_depend>
+
+  <exec_depend>cv_bridge</exec_depend>
+
+  <exec_depend>geometry_msgs</exec_depend>  <!-- Commonly used license strings: -->  <build_export_depend>sensor_msgs</build_export_depend>
+
+  <exec_depend>message_runtime</exec_depend>
+
+  <exec_depend>roscpp</exec_depend>  <!--   BSD, MIT, Boost Software License, GPLv2, GPLv3, LGPLv2.1, LGPLv3 -->  <build_export_depend>std_msgs</build_export_depend>
+
+  <exec_depend>rospy</exec_depend>
+
+  <exec_depend>sensor_msgs</exec_depend>  <license>TODO</license>  <exec_depend>cv_bridge</exec_depend>
+
+  <exec_depend>std_msgs</exec_depend>
+
+  <exec_depend>geometry_msgs</exec_depend>
+
+  <export>
+
+  </export>  <exec_depend>message_runtime</exec_depend>
+
+</package>
+  <!-- Url tags are optional, but multiple are allowed, one per tag -->  <exec_depend>roscpp</exec_depend>
+
+  <!-- Optional attribute type can be: website, bugtracker, or repository -->  <exec_depend>rospy</exec_depend>
+
+  <!-- Example: -->  <exec_depend>sensor_msgs</exec_depend>
+
+  <!-- <url type="website">http://wiki.ros.org/cam_tracker</url> -->  <exec_depend>std_msgs</exec_depend>>
+
+  <version>0.0.0</version>
+
   <description>The cam_tracker package</description>
 
-  <!-- One maintainer tag required, multiple allowed, one person per tag -->
-  <!-- Example:  -->
-  <!-- <maintainer email="jane.doe@example.com">Jane Doe</maintainer> -->
+  <!-- Author tags are optional, multiple are allowed, one per tag -->
+
+  <!-- Authors do not have to be maintainers, but could be -->  <!-- One maintainer tag required, multiple allowed, one person per tag -->
+
+  <!-- Example: -->  <!-- Example:  -->
+
+  <!-- <author email="jane.doe@example.com">Jane Doe</author> -->  <!-- <maintainer email="jane.doe@example.com">Jane Doe</maintainer> -->
+
   <maintainer email="micoair@todo.todo">micoair</maintainer>
 
 
-  <!-- One license tag required, multiple allowed, one license per tag -->
-  <!-- Commonly used license strings: -->
-  <!--   BSD, MIT, Boost Software License, GPLv2, GPLv3, LGPLv2.1, LGPLv3 -->
-  <license>TODO</license>
-
-
-  <!-- Url tags are optional, but multiple are allowed, one per tag -->
-  <!-- Optional attribute type can be: website, bugtracker, or repository -->
-  <!-- Example: -->
-  <!-- <url type="website">http://wiki.ros.org/cam_tracker</url> -->
-
-
-  <!-- Author tags are optional, multiple are allowed, one per tag -->
-  <!-- Authors do not have to be maintainers, but could be -->
-  <!-- Example: -->
-  <!-- <author email="jane.doe@example.com">Jane Doe</author> -->
-
 
   <!-- The *depend tags are used to specify dependencies -->
-  <!-- Dependencies can be catkin packages or system dependencies -->
-  <!-- Examples: -->
-  <!-- Use depend as a shortcut for packages that are both build and exec dependencies -->
-  <!--   <depend>roscpp</depend> -->
+
+  <!-- Dependencies can be catkin packages or system dependencies -->  <!-- One license tag required, multiple allowed, one license per tag -->
+
+  <!-- Examples: -->  <!-- Commonly used license strings: -->
+
+  <!-- Use depend as a shortcut for packages that are both build and exec dependencies -->  <!--   BSD, MIT, Boost Software License, GPLv2, GPLv3, LGPLv2.1, LGPLv3 -->
+
+  <!--   <depend>roscpp</depend> -->  <license>TODO</license>
+
   <!--   Note that this is equivalent to the following: -->
+
   <!--   <build_depend>roscpp</build_depend> -->
-  <!--   <exec_depend>roscpp</exec_depend> -->
-  <!-- Use build_depend for packages you need at compile time: -->
-  <!--   <build_depend>message_generation</build_depend> -->
-  <!-- Use build_export_depend for packages you need in order to build against this package: -->
+
+  <!--   <exec_depend>roscpp</exec_depend> -->  <!-- Url tags are optional, but multiple are allowed, one per tag -->
+
+  <!-- Use build_depend for packages you need at compile time: -->  <!-- Optional attribute type can be: website, bugtracker, or repository -->
+
+  <!--   <build_depend>message_generation</build_depend> -->  <!-- Example: -->
+
+  <!-- Use build_export_depend for packages you need in order to build against this package: -->  <!-- <url type="website">http://wiki.ros.org/cam_tracker</url> -->
+
   <!--   <build_export_depend>message_generation</build_export_depend> -->
+
   <!-- Use buildtool_depend for build tool packages: -->
-  <!--   <buildtool_depend>catkin</buildtool_depend> -->
-  <!-- Use exec_depend for packages you need at runtime: -->
-  <!--   <exec_depend>message_runtime</exec_depend> -->
-  <!-- Use test_depend for packages you need only for testing: -->
+
+  <!--   <buildtool_depend>catkin</buildtool_depend> -->  <!-- Author tags are optional, multiple are allowed, one per tag -->
+
+  <!-- Use exec_depend for packages you need at runtime: -->  <!-- Authors do not have to be maintainers, but could be -->
+
+  <!--   <exec_depend>message_runtime</exec_depend> -->  <!-- Example: -->
+
+  <!-- Use test_depend for packages you need only for testing: -->  <!-- <author email="jane.doe@example.com">Jane Doe</author> -->
+
   <!--   <test_depend>gtest</test_depend> -->
+
   <!-- Use doc_depend for packages you need only for building documentation: -->
-  <!--   <doc_depend>doxygen</doc_depend> -->
-  <buildtool_depend>catkin</buildtool_depend>
-  <build_depend>cv_bridge</build_depend>
+
+  <!--   <doc_depend>doxygen</doc_depend> -->  <!-- The *depend tags are used to specify dependencies -->
+
+  <buildtool_depend>catkin</buildtool_depend>  <!-- Dependencies can be catkin packages or system dependencies -->
+
+  <build_depend>cv_bridge</build_depend>  <!-- Examples: -->
+
+  <build_depend>geometry_msgs</build_depend>  <!-- Use depend as a shortcut for packages that are both build and exec dependencies -->
+
+  <build_depend>message_generation</build_depend>  <!--   <depend>roscpp</depend> -->
+
+  <build_depend>roscpp</build_depend>  <!--   Note that this is equivalent to the following: -->
+
+  <build_depend>rospy</build_depend>  <!--   <build_depend>roscpp</build_depend> -->
+
+  <build_depend>sensor_msgs</build_depend>  <!--   <exec_depend>roscpp</exec_depend> -->
+
+  <build_depend>std_msgs</build_depend>  <!-- Use build_depend for packages you need at compile time: -->
+
+  <build_export_depend>cv_bridge</build_export_depend>  <!--   <build_depend>message_generation</build_depend> -->
+
+  <build_export_depend>geometry_msgs</build_export_depend>  <!-- Use build_export_depend for packages you need in order to build against this package: -->
+
+  <build_export_depend>roscpp</build_export_depend>  <!--   <build_export_depend>message_generation</build_export_depend> -->
+
+  <build_export_depend>rospy</build_export_depend>  <!-- Use buildtool_depend for build tool packages: -->
+
+  <build_export_depend>sensor_msgs</build_export_depend>  <!--   <buildtool_depend>catkin</buildtool_depend> -->
+
+  <build_export_depend>std_msgs</build_export_depend>  <!-- Use exec_depend for packages you need at runtime: -->
+
+  <exec_depend>cv_bridge</exec_depend>  <!--   <exec_depend>message_runtime</exec_depend> -->
+
+  <exec_depend>geometry_msgs</exec_depend>  <!-- Use test_depend for packages you need only for testing: -->
+
+  <exec_depend>message_runtime</exec_depend>  <!--   <test_depend>gtest</test_depend> -->
+
+  <exec_depend>roscpp</exec_depend>  <!-- Use doc_depend for packages you need only for building documentation: -->
+
+  <exec_depend>rospy</exec_depend>  <!--   <doc_depend>doxygen</doc_depend> -->
+
+  <exec_depend>sensor_msgs</exec_depend>  <buildtool_depend>catkin</buildtool_depend>
+
+  <exec_depend>std_msgs</exec_depend>  <build_depend>cv_bridge</build_depend>
+
   <build_depend>geometry_msgs</build_depend>
+
   <build_depend>message_generation</build_depend>
-  <build_depend>rospy</build_depend>
-  <build_depend>sensor_msgs</build_depend>
+
+  <!-- The export tag contains other, unspecified, tags -->  <build_depend>roscpp</build_depend>
+
+  <export>  <build_depend>rospy</build_depend>
+
+    <!-- Other tools can request additional information be placed here -->  <build_depend>sensor_msgs</build_depend>
+
   <build_depend>std_msgs</build_depend>
-  <build_export_depend>cv_bridge</build_export_depend>
-  <build_export_depend>geometry_msgs</build_export_depend>
+
+  </export>  <build_export_depend>cv_bridge</build_export_depend>
+
+</package>  <build_export_depend>geometry_msgs</build_export_depend>
+  <build_export_depend>roscpp</build_export_depend>
   <build_export_depend>rospy</build_export_depend>
   <build_export_depend>sensor_msgs</build_export_depend>
   <build_export_depend>std_msgs</build_export_depend>
   <exec_depend>cv_bridge</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>message_runtime</exec_depend>
+  <exec_depend>roscpp</exec_depend>
   <exec_depend>rospy</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>std_msgs</exec_depend>

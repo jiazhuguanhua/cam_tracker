@@ -11,6 +11,7 @@ find_package(catkin REQUIRED COMPONENTS
   cv_bridge
   geometry_msgs
   message_generation
+  roscpp
   rospy
   sensor_msgs
   std_msgs
@@ -110,7 +111,7 @@ generate_messages(
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES cam_tracker
-  CATKIN_DEPENDS cv_bridge geometry_msgs message_runtime rospy sensor_msgs std_msgs
+  CATKIN_DEPENDS cv_bridge geometry_msgs message_runtime roscpp rospy sensor_msgs std_msgs
 #  DEPENDS system_lib
 )
 
@@ -140,6 +141,9 @@ include_directories(
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/cam_tracker_node.cpp)
 
+## C++ 测试程序：验证消息类型兼容性
+add_executable(detection_test src/detection_test.cpp)
+
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
 ## target back to the shorter version for ease of user use
@@ -149,11 +153,15 @@ include_directories(
 ## Add cmake target dependencies of the executable
 ## same as for the library above
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(detection_test ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
 # target_link_libraries(${PROJECT_NAME}_node
 #   ${catkin_LIBRARIES}
 # )
+target_link_libraries(detection_test
+  ${catkin_LIBRARIES}
+)
 
 #############
 ## Install ##
