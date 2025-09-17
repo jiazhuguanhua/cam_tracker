@@ -1,3 +1,14 @@
+### NOTICE TO TEAMMATES
+- 升级了/detecton/single_target和/detection/multi_target, 和msg文件对应关系较为错乱
+- /single_target: Detection.msg
+- /multi_target: CompleteDetection.msg -> DetectionArray.msg
+- 平时使用/single_target即可，消息格式完全符合djw的结构。
+- 目前/single_target更新逻辑：
+- 第一帧符合name的物体 -> Tracking
+- if lost track over 30 frames: update object id
+
+# 目前存在cam_tracker和person_tracker文件名混用情况，而二者为同一node，会在下个版本修复
+# 预计更新：加入KCF算法模式，提高对已有目标的追踪能力（ByteTracker的 Detect能力>Track）
 # cam_tracker ROS包
 
 ## 🎯 功能概述
