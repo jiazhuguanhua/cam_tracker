@@ -1,7 +1,7 @@
 <launch>
   <!-- Launch文件参数 -->
   <arg name="debug" default="false" doc="Enable debug logging" />
-  <arg name="show_image" default="true" doc="Show visualization window" />
+  <arg name="show_image" default="false" doc="Show visualization window" />
 
   <!-- USB摄像头节点 -->
   <node name="usb_cam" pkg="usb_cam" type="usb_cam_node" output="log" respawn="false">

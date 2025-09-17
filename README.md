@@ -6,10 +6,12 @@
 
 ### 核心特性
 - 🔥 **YOLO11检测** + **ByteTrack追踪**：业界领先的检测追踪算法
-- 🎮 **动态控制**：通过ROS话题实时启动/停止追踪器
+- � **专用Person追踪**：智能锁定并追踪置信度最高的person目标 ⭐（可修改为多种支持的name）
+- 📡 **双话题架构**：同时输出简化单目标和完整多目标信息 ⭐
+- �🎮 **动态控制**：通过ROS话题实时启动/停止追踪器
 - 📊 **实时可视化**：边界框、追踪ID、运动轨迹显示
 - ⚡ **高性能**：支持CPU/GPU加速，优化的处理流程
-- � **易集成**：标准ROS接口，支持多种硬件平台
+- 🔧 **易集成**：标准ROS接口，支持多种硬件平台
 
 ## 🖥️ 运行环境
 
@@ -55,11 +57,15 @@ rostopic pub /tracker_action std_msgs/Bool "data: false"
 
 ### 4. 监控结果
 ```bash
-# 查看检测结果
-rostopic echo /yolo_identify
+# 查看单目标person追踪结果
+rostopic echo /detection/single_target
+
+# 查看所有目标检测结果  
+rostopic echo /detection/multi_target
 
 # 查看系统状态
-rostopic list | grep tracker
+rostopic list | grep detection
+rostopic hz /detection/single_target  # 检查发布频率
 ```
 
 ## ⚙️ 配置参数
@@ -100,7 +106,57 @@ rosparam list | grep cam_tracker
 /tracker_action             # 追踪器控制 (std_msgs/Bool)
 
 # 发布话题  
-/yolo_identify              # 检测结果 (cam_tracker/DetectionArray)
+/detection/single_target    # 单目标检测结果 (cam_tracker/Detection)
+/detection/multi_target     # 多目标检测结果 (cam_tracker/DetectionArray)
+```
+
+### 消息类型对应关系
+
+#### `/detection/single_target` → `Detection.msg`
+**简化的单目标消息**，用于追踪当前置信度最高的person目标：
+```
+uint8 detection_id      # 目标追踪ID
+float32 detection_x     # 目标中心X坐标
+float32 detection_y     # 目标中心Y坐标
+```
+
+#### `/detection/multi_target` → `DetectionArray.msg` 
+**完整的多目标消息**，包含所有检测目标的详细信息：
+```
+std_msgs/Header header              # 时间戳和坐标系信息
+CompleteDetection[] detections      # 检测目标数组
+int32 image_width                   # 图像宽度
+int32 image_height                  # 图像高度  
+int32 total_objects                 # 总检测目标数量
+float32 processing_time             # 处理时间(秒)
+```
+
+#### `CompleteDetection.msg` (用于DetectionArray)
+**单个目标的完整信息**：
+```
+std_msgs/Header header      # 时间戳和坐标系信息
+int32 id                    # 跟踪ID
+string class_name           # 目标类别名称 (如 "person", "car")
+float32 confidence          # 检测置信度 (0.0-1.0)
+float32[] xyxy              # 边界框 [x1, y1, x2, y2]
+float32 center_x            # 中心点X坐标
+float32 center_y            # 中心点Y坐标
+float32 width               # 宽度
+float32 height              # 高度
+```
+
+### 使用示例
+```bash
+# 监控单目标追踪结果
+rostopic echo /detection/single_target
+
+# 监控所有目标检测结果
+rostopic echo /detection/multi_target
+
+# 查看消息类型定义
+rosmsg show cam_tracker/Detection
+rosmsg show cam_tracker/CompleteDetection
+rosmsg show cam_tracker/DetectionArray
 ```
 
 ### 控制命令
@@ -191,17 +247,31 @@ htop -p $(pgrep -f cam_tracker)  # 监控CPU使用
 ```
 cam_tracker/
 ├── launch/cam_tracker.launch           # 主启动文件
-├── scripts/cam_tracker_node.py         # 核心追踪节点
+├── scripts/
+│   ├── cam_tracker_node.py            # 原版多目标追踪节点
+│   └── person_tracker_node.py         # 新版Person专用追踪节点 ⭐
 ├── msg/                                # 消息定义
-│   ├── Detection.msg                   # 单个检测结果
-│   └── DetectionArray.msg              # 检测结果数组
+│   ├── Detection.msg                   # 单目标简化消息
+│   ├── CompleteDetection.msg           # 单目标完整消息
+│   └── DetectionArray.msg              # 多目标数组消息
 ├── models/yolo11n.pt                   # YOLO11模型文件
 ├── start_tracker_demo.sh               # 控制演示脚本 ⭐
 └── README.md                           # 本文档
 ```
 
+### 消息文件说明
+- **Detection.msg**: 追踪单个person目标的简化消息格式
+- **CompleteDetection.msg**: 包含完整检测信息的单目标消息
+- **DetectionArray.msg**: 包含所有检测目标的数组消息
+
 ## 🤝 应用场景
 
+### 专用Person追踪模式 ⭐
+- 🎯 **智能person跟随**: 专门追踪置信度最高的person目标
+- 🔄 **自动目标切换**: 当前目标丢失时自动选择新的person目标
+- 📡 **双话题输出**: 同时提供简化和完整的检测信息
+
+### 通用检测场景
 - 🚁 **无人机视觉追踪**: 自动识别和跟踪地面目标
 - 🤖 **移动机器人导航**: 实时检测行人、车辆、障碍物  
 - 📹 **智能监控系统**: 多目标同时追踪

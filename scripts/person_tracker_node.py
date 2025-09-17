@@ -56,7 +56,7 @@ class PersonTrackerNode:
     def __init__(self):
         """初始化Person追踪节点"""
         rospy.init_node('person_tracker_node', anonymous=True)
-        rospy.loginfo("初始化Person追踪节点...")
+        rospy.loginfo("初始化追踪节点...")
         
         # 追踪状态
         self.tracker_enabled = False
@@ -298,7 +298,7 @@ class PersonTrackerNode:
 
 def main():
     try:
-        rospy.loginfo("启动Person追踪节点...")
+        rospy.loginfo("启动追踪节点...")
         
         # 创建节点实例
         node_start_time = time.time()
@@ -323,7 +323,7 @@ def main():
         import traceback
         rospy.logdebug(f"错误详情:\n{traceback.format_exc()}")
     finally:
-        rospy.loginfo("Person追踪节点已停止")
+        rospy.loginfo("追踪节点已停止")
 
 
 if __name__ == '__main__':

@@ -1,7 +1,0 @@
-<launch>
-  <!-- Debug模式启动文件 - 启用详细日志输出和可视化 -->
-  <include file="$(find cam_tracker)/launch/cam_tracker.launch">
-    <arg name="debug" value="true" />
-    <arg name="show_image" value="true" />
-  </include>
-</launch>
