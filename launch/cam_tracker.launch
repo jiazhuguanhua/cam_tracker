@@ -21,7 +21,7 @@
   </node>
 
   <!-- 延迟启动追踪节点，等摄像头稳定 -->
-  <node name="person_trackgiter_node" pkg="cam_tracker" type="person_tracker_node.py" output="screen" 
+  <node name="cam_tracker_node" pkg="cam_tracker" type="cam_tracker_node.py" output="screen" 
         respawn="false" launch-prefix="bash -c 'sleep 2; $0 $@' ">
     <!-- YOLO模型参数 -->
     <param name="model_path" value="/home/micoair/drone_vision_ws/src/cam_tracker/models/yolo11n.pt" />
