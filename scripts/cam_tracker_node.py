@@ -3,7 +3,7 @@
 
 """
 ROS节点: 使用YOLO11进行实时目标检测和追踪
-订阅USB摄像头图像，发布检测和追踪结果
+订阅USB摄像头图像，发布置信度最高的检测结果到 /detection/data 话题
 支持通过 /tracker_action 话题控制追踪器的启动和停止
 """
 
@@ -16,7 +16,7 @@ from collections import defaultdict
 from sensor_msgs.msg import Image
 from std_msgs.msg import Header, Bool
 from cv_bridge import CvBridge, CvBridgeError
-from cam_tracker.msg import Detection, DetectionArray
+from cam_tracker.msg import Detection
 
 from ultralytics import YOLO
 
@@ -116,14 +116,14 @@ class CamTrackerNode:
         # ROS话题初始化
         rospy.logdebug("初始化ROS话题...")
         self.image_sub = rospy.Subscriber('/usb_cam/image_raw', Image, self.image_callback, queue_size=1)
-        self.detection_pub = rospy.Publisher('/yolo_identify', DetectionArray, queue_size=10)
+        self.detection_pub = rospy.Publisher('/detection/data', Detection, queue_size=10)
         
         # 添加追踪器控制话题
         self.action_sub = rospy.Subscriber('/tracker_action', Bool, self.tracker_action_callback, queue_size=1)
         
         rospy.logdebug("订阅话题: /usb_cam/image_raw")
         rospy.logdebug("订阅话题: /tracker_action (Bool)")
-        rospy.logdebug("发布话题: /yolo_identify")
+        rospy.logdebug("发布话题: /detection/data")
         rospy.logdebug(f"图像订阅队列大小: 1")
         rospy.logdebug(f"检测发布队列大小: 10")
         
@@ -187,13 +187,7 @@ class CamTrackerNode:
             self.tracker_enabled = False
             rospy.loginfo("追踪器已停止")
             
-            # 发布空的检测结果
-            empty_array = DetectionArray()
-            empty_array.header.stamp = rospy.Time.now()
-            empty_array.header.frame_id = "camera"
-            empty_array.total_objects = 0
-            empty_array.processing_time = 0.0
-            self.detection_pub.publish(empty_array)
+            # 停止追踪时不需要发布空消息，因为现在使用单个检测消息格式
             
         elif action and self.tracker_enabled:
             rospy.logdebug("追踪器已经在运行中")
@@ -449,53 +443,35 @@ class CamTrackerNode:
         cv2.waitKey(1)
     
     def publish_detections(self, tracked_objects, header, width, height, processing_time):
-        """发布检测结果"""
+        """发布置信度最高的检测结果"""
         try:
-            detection_array = DetectionArray()
-            detection_array.header = header
-            detection_array.header.frame_id = "camera"
-            detection_array.image_width = width
-            detection_array.image_height = height
-            detection_array.total_objects = len(tracked_objects)
-            detection_array.processing_time = processing_time
+            # 如果没有检测到目标，直接返回
+            if not tracked_objects:
+                rospy.logdebug("当前帧未检测到目标")
+                return
             
-            rospy.logdebug(f"准备发布检测数组: 图像尺寸({width}x{height}), "
-                          f"目标数量: {len(tracked_objects)}, "
-                          f"处理时间: {processing_time*1000:.1f}ms")
+            # 找到置信度最高的目标
+            best_object = max(tracked_objects, key=lambda obj: obj['confidence'])
             
-            for i, obj in enumerate(tracked_objects):
-                detection = Detection()
-                detection.header = header
-                detection.id = obj['track_id']
-                detection.class_name = obj['class_name']
-                detection.confidence = obj['confidence']
-                
-                x1, y1, x2, y2 = obj['bbox']
-                detection.xyxy = [x1, y1, x2, y2]
-                detection.center_x = obj.get('center_x', (x1 + x2) / 2.0)
-                detection.center_y = obj.get('center_y', (y1 + y2) / 2.0)
-                detection.width = x2 - x1
-                detection.height = y2 - y1
-                
-                detection_array.detections.append(detection)
-                
-                rospy.logdebug(f"检测对象{i+1}: ID={detection.id}, "
-                              f"类别={detection.class_name}, "
-                              f"置信度={detection.confidence:.3f}, "
-                              f"中心=({detection.center_x:.0f},{detection.center_y:.0f})")
+            # 创建Detection消息
+            detection = Detection()
+            detection.detection_id = best_object['track_id']
+            
+            # 计算检测框中心坐标
+            x1, y1, x2, y2 = best_object['bbox']
+            detection.detection_x = (x1 + x2) / 2.0
+            detection.detection_y = (y1 + y2) / 2.0
             
             # 发布消息
             publish_start = time.time()
-            self.detection_pub.publish(detection_array)
+            self.detection_pub.publish(detection)
             publish_time = time.time() - publish_start
             
+            rospy.logdebug(f"发布最高置信度检测结果: ID={detection.detection_id}, "
+                          f"位置=({detection.detection_x:.1f},{detection.detection_y:.1f}), "
+                          f"置信度={best_object['confidence']:.3f}, "
+                          f"类别={best_object['class_name']}")
             rospy.logdebug(f"消息发布完成，耗时: {publish_time*1000:.2f}ms")
-            
-            # 详细日志输出
-            if len(tracked_objects) > 0:
-                rospy.logdebug(f"成功发布 {len(tracked_objects)} 个追踪目标到话题 /yolo_identify")
-            else:
-                rospy.logdebug("发布空检测结果（当前帧未检测到目标）")
                 
         except Exception as e:
             rospy.logerr(f"发布检测结果时发生错误: {e}")
