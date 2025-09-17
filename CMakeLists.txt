@@ -53,6 +53,7 @@ find_package(catkin REQUIRED COMPONENTS
 add_message_files(
   FILES
   Detection.msg
+  CompleteDetection.msg
   DetectionArray.msg
 )
 

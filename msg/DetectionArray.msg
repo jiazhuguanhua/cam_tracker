@@ -2,7 +2,7 @@
 std_msgs/Header header
 
 # 检测目标数组
-Detection[] detections
+CompleteDetection[] detections
 
 # 图像信息
 int32 image_width           # 图像宽度
