@@ -32,7 +32,7 @@ TARGET_CLASS = "person"  # 追踪目标类型
 
 
 def setup_opencv_logging():
-    """安全地设置OpenCV日志级别，兼容不同版本"""
+    """安全地设置OpenCV日志级别，兼容不同1111111版本"""
     try:
         cv_version = cv2.__version__
         rospy.logdebug(f"OpenCV版本: {cv_version}")
@@ -76,7 +76,9 @@ class PersonTrackerNode:
         setup_opencv_logging()
         
         # 初始化YOLO模型
-        model_path = rospy.get_param('~model_path', '/home/micoair/drone_vision_ws/yolo11n.pt')
+        # 自动查找模型文件路径，优先级：ROS参数 > 包内models目录 > 默认下载
+        default_model_path = self.find_model_path()
+        model_path = rospy.get_param('~model_path', default_model_path)
         rospy.loginfo(f"加载YOLO模型: {model_path}")
         
         try:
@@ -119,7 +121,40 @@ class PersonTrackerNode:
         rospy.loginfo("  发布: /detection/multi_target (所有目标完整信息)")
         rospy.loginfo(f"  输出频率: >= {self.min_publish_rate}Hz")
         
-        rospy.loginfo("Person追踪器待机中，发送控制信号启动")
+        rospy.loginfo("追踪器待机中，发送控制信号启动")
+
+    def find_model_path(self):
+        """自动查找YOLO模型文件路径"""
+        import rospkg
+        
+        try:
+            # 获取当前包的路径
+            rospack = rospkg.RosPack()
+            package_path = rospack.get_path('cam_tracker')
+            
+            # 定义可能的模型路径（按优先级排序）
+            possible_paths = [
+                os.path.join(package_path, 'models', 'yolo11n.pt'),
+                os.path.join(package_path, 'models', 'yolov8n.pt'),
+                os.path.join(package_path, 'yolo11n.pt'),
+                os.path.expanduser('~/models/yolo11n.pt'),
+                os.path.expanduser('~/yolo11n.pt'),
+                'yolo11n.pt'  # 这会让ultralytics自动下载
+            ]
+            
+            # 检查文件是否存在
+            for path in possible_paths:
+                if os.path.exists(path):
+                    rospy.loginfo(f"找到YOLO模型文件: {path}")
+                    return path
+            
+            # 如果没有找到现有文件，返回默认路径（ultralytics会自动下载）
+            rospy.logwarn("未找到本地YOLO模型文件，将使用默认模型（自动下载）")
+            return 'yolo11n.pt'
+            
+        except Exception as e:
+            rospy.logwarn(f"查找模型路径时出错: {e}")
+            return 'yolo11n.pt'
 
     def tracker_action_callback(self, msg):
         """处理追踪器控制消息"""
@@ -323,7 +358,7 @@ class PersonTrackerNode:
         
         if target_person is not None:
             # 有目标时，使用正常的tracker_id和位置
-            detection.detection_id = target_person['track_id']
+            detection.detection_id = 1
             detection.detection_x = target_person['center_x']
             detection.detection_y = target_person['center_y']
             
@@ -336,8 +371,8 @@ class PersonTrackerNode:
             rospy.logdebug(f"发布追踪目标: ID={detection.detection_id}, "
                           f"位置=({detection.detection_x:.1f},{detection.detection_y:.1f})")
         else:
-            # 没有目标时，使用tracker_id=-1，但输出最近的位置数据
-            detection.detection_id = -1
+            # 没有目标时，使用tracker_id=0，但输出最近的位置数据
+            detection.detection_id = 0
             
             if self.last_target_data is not None:
                 detection.detection_x = self.last_target_data['center_x']
