@@ -32,7 +32,7 @@ TARGET_CLASS = "person"  # 追踪目标类型
 
 
 def setup_opencv_logging():
-    """安全地设置OpenCV日志级别，兼容不同1111111版本"""
+    """安全地设置OpenCV日志级别，兼容不同版本"""
     try:
         cv_version = cv2.__version__
         rospy.logdebug(f"OpenCV版本: {cv_version}")
