@@ -28,7 +28,7 @@ os.environ['AV_LOG_FORCE_NOCOLOR'] = '1'
 os.environ['OPENCV_LOG_LEVEL'] = 'ERROR'
 
 # 目标追踪配置
-TARGET_CLASS = "person"  # 追踪目标类型
+TARGET_CLASS = "red_brick"  # 追踪目标类型
 
 
 def setup_opencv_logging():
@@ -117,7 +117,7 @@ class PersonTrackerNode:
         rospy.loginfo("话题配置完成:")
         rospy.loginfo("  订阅: /usb_cam/image_raw")
         rospy.loginfo("  订阅: /tracker_action")
-        rospy.loginfo("  发布: /detection/single_target (简化person信息)")
+        rospy.loginfo("  发布: /detection/data (简化person信息)")
         rospy.loginfo("  发布: /detection/multi_target (所有目标完整信息)")
         rospy.loginfo(f"  输出频率: >= {self.min_publish_rate}Hz")
         
@@ -134,8 +134,8 @@ class PersonTrackerNode:
             
             # 定义可能的模型路径（按优先级排序）
             possible_paths = [
+                os.path.join(package_path, 'models', 'nuaa_brick_best.pt'),
                 os.path.join(package_path, 'models', 'yolo11n.pt'),
-                os.path.join(package_path, 'models', 'yolov8n.pt'),
                 os.path.join(package_path, 'yolo11n.pt'),
                 os.path.expanduser('~/models/yolo11n.pt'),
                 os.path.expanduser('~/yolo11n.pt'),
