@@ -105,7 +105,7 @@ class PersonTrackerNode:
         self.image_sub = rospy.Subscriber('/usb_cam/image_raw', Image, self.image_callback, queue_size=1)
         
         # 双话题发布者
-        self.single_target_pub = rospy.Publisher('/detection/single_target', Detection, queue_size=10)
+        self.single_target_pub = rospy.Publisher('/detection/data', Detection, queue_size=10)
         self.multi_target_pub = rospy.Publisher('/detection/multi_target', DetectionArray, queue_size=10)
         
         # 追踪器控制话题
