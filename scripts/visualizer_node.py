@@ -25,6 +25,7 @@ def main():
     bridge = CvBridge()
 
     rospy.init_node('visualizer_node', anonymous=True)
+
     sub = rospy.Subscriber(
         name="/detection/data",
         data_class=Detection,
@@ -32,17 +33,17 @@ def main():
         queue_size=10
     )
     sub_video = rospy.Subscriber(
-        name="/usb_cam/image_raw",
+        name="/camera/color/image_raw",
         data_class=Image,
         callback=video_callback,
-        queue_size=10
+        queue_size=1
     )
 
     rospy.loginfo("Visualizer node running...")
     rospy.on_shutdown(lambda: cv2.destroyAllWindows())
     cv2.namedWindow("Visulizer Node", cv2.WINDOW_NORMAL)
     
-    rate = rospy.Rate(15)
+    rate = rospy.Rate(50)
     while not rospy.is_shutdown():
         if cv_image is not None:
             point_coords = (int(detect_data.detection_x), int(detect_data.detection_y))

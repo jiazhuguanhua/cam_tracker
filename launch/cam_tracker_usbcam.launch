@@ -1,0 +1,29 @@
+<launch>
+  <!-- Launch文件参数 -->
+  <arg name="cam_topic" default="/usb_cam/image_raw" />
+  <arg name="show_image" default="false" />
+  <arg name="debug" default="false" />
+
+  <!-- USB摄像头节点 -->
+  <node name="usb_cam" pkg="usb_cam" type="usb_cam_node" output="log" respawn="false">
+    <param name="video_device" value="/dev/video0" />
+    <param name="image_width" value="640" />
+    <param name="image_height" value="480" />
+    <param name="pixel_format" value="yuyv" />
+    <param name="camera_frame_id" value="usb_cam" />
+    <param name="camera_name" value="head_camera" />
+    <param name="camera_info_url" value="" />
+    <param name="io_method" value="mmap"/>
+    <param name="framerate" value="15"/>
+    <!-- 设置环境变量来抑制FFmpeg警告 -->
+    <env name="FFMPEG_HIDE_BANNER" value="1" />
+    <env name="AV_LOG_FORCE_NOCOLOR" value="1" />
+    <!-- 移除可能导致问题的自动对焦参数 -->
+  </node>
+
+  <include file="$(find cam_tracker)/launch/cam_tracker.launch">
+    <arg name="cam_topic" value="$(arg cam_topic)" />
+    <arg name="debug" value="$(arg debug)" />
+    <arg name="show_image" value="$(arg show_image)" />
+  </include>
+</launch>

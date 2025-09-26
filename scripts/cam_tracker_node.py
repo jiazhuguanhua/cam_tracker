@@ -28,7 +28,7 @@ os.environ['AV_LOG_FORCE_NOCOLOR'] = '1'
 os.environ['OPENCV_LOG_LEVEL'] = 'ERROR'
 
 # 目标追踪配置
-TARGET_CLASS = "person"  # 追踪目标类型
+TARGET_CLASS = "red_brick"  # 追踪目标类型
 
 
 def setup_opencv_logging():
@@ -56,7 +56,7 @@ class PersonTrackerNode:
     def __init__(self):
         """初始化Person追踪节点"""
         rospy.init_node('cam_tracker_node', anonymous=True)
-        rospy.loginfo("初始化Person追踪节点...")
+        rospy.loginfo("初始化追踪节点...")
         
         # 追踪状态
         self.tracker_enabled = False
@@ -65,11 +65,20 @@ class PersonTrackerNode:
         self.current_frame = 0
         self.max_missing_frames = 30  # 最大丢失帧数，超过则切换目标
         
+        # 最近的目标数据存储（用于没有目标时输出）
+        self.last_target_data = None
+        
+        # 输出频率控制
+        self.min_publish_rate = 20.0  # 最小输出频率20Hz
+        self.last_publish_time = 0.0
+        
         # 初始化OpenCV日志
         setup_opencv_logging()
         
         # 初始化YOLO模型
-        model_path = rospy.get_param('~model_path', '/home/micoair/drone_vision_ws/yolo11n.pt')
+        # 自动查找模型文件路径，优先级：ROS参数 > 包内models目录 > 默认下载
+        default_model_path = self.find_model_path()
+        model_path = rospy.get_param('~model_path', default_model_path)
         rospy.loginfo(f"加载YOLO模型: {model_path}")
         
         try:
@@ -87,38 +96,66 @@ class PersonTrackerNode:
         self.iou_threshold = rospy.get_param('~iou_threshold', 0.45)
         self.max_det = rospy.get_param('~max_det', 300)
         self.tracker_type = rospy.get_param('~tracker_type', 'bytetrack.yaml')
-        
-        # 图像显示参数
-        self.show_image = rospy.get_param('~show_image', False)
-        self.track_history = defaultdict(lambda: [])  # 轨迹历史
+        self.cam_topic = rospy.get_param('~cam_topic')
         
         rospy.loginfo(f"追踪参数: conf={self.confidence_threshold}, iou={self.iou_threshold}")
         rospy.loginfo(f"目标追踪类型: {TARGET_CLASS}")
-        rospy.loginfo(f"图像显示: {'开启' if self.show_image else '关闭'}")
-        
-        # 如果需要显示图像，初始化OpenCV窗口
-        if self.show_image:
-            cv2.namedWindow("YOLO11 Person Tracker", cv2.WINDOW_AUTOSIZE)
-            rospy.loginfo("OpenCV显示窗口已创建")
         
         # ROS话题初始化
         rospy.loginfo("初始化ROS话题...")
-        self.image_sub = rospy.Subscriber('/usb_cam/image_raw', Image, self.image_callback, queue_size=1)
+        self.image_sub = rospy.Subscriber(self.cam_topic, Image, self.image_callback, queue_size=1)
         
         # 双话题发布者
-        self.single_target_pub = rospy.Publisher('/detection/single_target', Detection, queue_size=10)
+        self.single_target_pub = rospy.Publisher('/detection/data', Detection, queue_size=10)
         self.multi_target_pub = rospy.Publisher('/detection/multi_target', DetectionArray, queue_size=10)
         
         # 追踪器控制话题
         self.action_sub = rospy.Subscriber('/tracker_action', Bool, self.tracker_action_callback, queue_size=1)
         
+        # 定时器确保最小输出频率
+        self.publish_timer = rospy.Timer(rospy.Duration(1.0/self.min_publish_rate), self.timer_publish_callback)
+        
         rospy.loginfo("话题配置完成:")
-        rospy.loginfo("  订阅: /usb_cam/image_raw")
+        rospy.loginfo(f"  订阅: {self.cam_topic}")
         rospy.loginfo("  订阅: /tracker_action")
-        rospy.loginfo("  发布: /detection/single_target (简化信息)")
+        rospy.loginfo("  发布: /detection/data (简化person信息)")
         rospy.loginfo("  发布: /detection/multi_target (所有目标完整信息)")
+        rospy.loginfo(f"  输出频率: >= {self.min_publish_rate}Hz")
         
         rospy.loginfo("追踪器待机中，发送控制信号启动")
+
+    def find_model_path(self):
+        """自动查找YOLO模型文件路径"""
+        import rospkg
+        
+        try:
+            # 获取当前包的路径
+            rospack = rospkg.RosPack()
+            package_path = rospack.get_path('cam_tracker')
+            
+            # 定义可能的模型路径（按优先级排序）
+            possible_paths = [
+                os.path.join(package_path, 'models', 'nuaa_brick_best.pt'),
+                os.path.join(package_path, 'models', 'yolo11n.pt'),
+                os.path.join(package_path, 'yolo11n.pt'),
+                os.path.expanduser('~/models/yolo11n.pt'),
+                os.path.expanduser('~/yolo11n.pt'),
+                'yolo11n.pt'  # 这会让ultralytics自动下载
+            ]
+            
+            # 检查文件是否存在
+            for path in possible_paths:
+                if os.path.exists(path):
+                    rospy.loginfo(f"找到YOLO模型文件: {path}")
+                    return path
+            
+            # 如果没有找到现有文件，返回默认路径（ultralytics会自动下载）
+            rospy.logwarn("未找到本地YOLO模型文件，将使用默认模型（自动下载）")
+            return 'yolo11n.pt'
+            
+        except Exception as e:
+            rospy.logwarn(f"查找模型路径时出错: {e}")
+            return 'yolo11n.pt'
 
     def tracker_action_callback(self, msg):
         """处理追踪器控制消息"""
@@ -128,6 +165,7 @@ class PersonTrackerNode:
             # 启动追踪器
             self.tracker_enabled = True
             self.tracked_person_id = None  # 重置追踪目标
+            self.last_publish_time = time.time()  # 重置发布时间
             rospy.loginfo(f"追踪器已启动，开始寻找{TARGET_CLASS}目标")
             
         elif not action and self.tracker_enabled:
@@ -140,6 +178,25 @@ class PersonTrackerNode:
             rospy.logdebug("追踪器已经在运行中")
         elif not action and not self.tracker_enabled:
             rospy.logdebug("追踪器已经是停止状态")
+
+    def timer_publish_callback(self, event):
+        """定时器回调，确保最小发布频率"""
+        if not self.tracker_enabled:
+            return
+            
+        current_time = time.time()
+        time_since_last_publish = current_time - self.last_publish_time
+        min_interval = 1.0 / self.min_publish_rate
+        
+        # 如果距离上次发布时间已经超过最小间隔，强制发布一次
+        if time_since_last_publish >= min_interval:
+            header = Header()
+            header.stamp = rospy.Time.now()
+            header.frame_id = "camera"
+            
+            # 发布最近的目标数据（tracker_id=-1表示没有当前目标）
+            self.publish_single_target(None, header)
+            self.last_publish_time = current_time
 
     def image_callback(self, msg):
         """处理图像回调"""
@@ -167,11 +224,6 @@ class PersonTrackerNode:
             
             # 解析检测结果
             tracked_objects = self.parse_detection_results(results)
-            
-            # 显示图像（如果启用）
-            if self.show_image:
-                current_fps = 1.0 / processing_time if processing_time > 0 else 0
-                self.display_image(cv_image, tracked_objects, current_fps)
             
             # 发布消息
             self.publish_detections(tracked_objects, msg.header, width, height, processing_time)
@@ -208,12 +260,6 @@ class PersonTrackerNode:
                 x1, y1, x2, y2 = xyxy
                 center_x = (x1 + x2) / 2.0
                 center_y = (y1 + y2) / 2.0
-                
-                # 更新轨迹历史（用于显示）
-                track = self.track_history[track_id]
-                track.append((float(center_x), float(center_y)))
-                if len(track) > 30:  # 保持最近30个点
-                    track.pop(0)
                 
                 obj = {
                     'track_id': track_id,
@@ -272,8 +318,10 @@ class PersonTrackerNode:
             
             # 2. 发布追踪的person目标到 /detection/single_target
             target_person = self.select_target_person(tracked_objects)
-            if target_person:
-                self.publish_single_target(target_person)
+            self.publish_single_target(target_person, header)
+            
+            # 更新发布时间
+            self.last_publish_time = time.time()
                 
         except Exception as e:
             rospy.logerr(f"发布检测结果时发生错误: {e}")
@@ -305,99 +353,40 @@ class PersonTrackerNode:
         self.multi_target_pub.publish(detection_array)
         rospy.logdebug(f"发布多目标信息: {len(tracked_objects)}个目标")
 
-    def publish_single_target(self, target_person):
+    def publish_single_target(self, target_person, header=None):
         """发布当前追踪的person目标简化信息"""
         detection = Detection()
-        detection.detection_id = target_person['track_id']
-        detection.detection_x = target_person['center_x']
-        detection.detection_y = target_person['center_y']
+        
+        if target_person is not None:
+            # 有目标时，使用正常的tracker_id和位置
+            detection.detection_id = 1
+            detection.detection_x = target_person['center_x']
+            detection.detection_y = target_person['center_y']
+            
+            # 保存最新的目标数据
+            self.last_target_data = {
+                'center_x': target_person['center_x'],
+                'center_y': target_person['center_y']
+            }
+            
+            rospy.logdebug(f"发布追踪目标: ID={detection.detection_id}, "
+                          f"位置=({detection.detection_x:.1f},{detection.detection_y:.1f})")
+        else:
+            # 没有目标时，使用tracker_id=0，但输出最近的位置数据
+            detection.detection_id = 0
+            
+            if self.last_target_data is not None:
+                detection.detection_x = self.last_target_data['center_x']
+                detection.detection_y = self.last_target_data['center_y']
+                rospy.logdebug(f"发布最近目标数据: ID=-1, "
+                              f"位置=({detection.detection_x:.1f},{detection.detection_y:.1f})")
+            else:
+                # 如果没有历史数据，输出默认值
+                detection.detection_x = 0.0
+                detection.detection_y = 0.0
+                rospy.logdebug("发布默认目标数据: ID=-1, 位置=(0.0,0.0)")
         
         self.single_target_pub.publish(detection)
-        rospy.logdebug(f"发布追踪目标: ID={detection.detection_id}, "
-                      f"位置=({detection.detection_x:.1f},{detection.detection_y:.1f})")
-
-    def display_image(self, image, tracked_objects, current_fps):
-        """显示带有检测框、ID、中心点和轨迹的图像"""
-        annotated_frame = image.copy()
-        
-        # 显示所有检测到的目标
-        for obj in tracked_objects:
-            x1, y1, x2, y2 = obj['bbox']
-            track_id = obj['track_id']
-            class_name = obj['class_name']
-            confidence = obj['confidence']
-            center_x = obj.get('center_x', (x1 + x2) / 2)
-            center_y = obj.get('center_y', (y1 + y2) / 2)
-            
-            # 根据类别设置不同颜色
-            if class_name == 'person':
-                # 如果是当前追踪的person目标，用红色突出显示
-                if track_id == self.tracked_person_id:
-                    color = (0, 0, 255)  # 红色
-                    thickness = 3
-                else:
-                    color = (0, 255, 0)  # 绿色
-                    thickness = 2
-            elif class_name == 'car':
-                color = (255, 0, 0)  # 蓝色
-                thickness = 2
-            elif class_name == 'bicycle':
-                color = (0, 255, 255)  # 黄色
-                thickness = 2
-            elif class_name == 'motorcycle':
-                color = (255, 0, 255)  # 紫色
-                thickness = 2
-            else:
-                color = (255, 255, 255)  # 白色
-                thickness = 2
-            
-            # 绘制边界框
-            cv2.rectangle(annotated_frame, (int(x1), int(y1)), (int(x2), int(y2)), color, thickness)
-            
-            # 绘制中心点
-            cv2.circle(annotated_frame, (int(center_x), int(center_y)), 5, color, -1)
-            cv2.circle(annotated_frame, (int(center_x), int(center_y)), 8, color, 2)
-            
-            # 绘制ID和类别标签
-            if track_id == self.tracked_person_id:
-                label = f"TRACKING: ID:{track_id} {class_name} {confidence:.2f}"
-            else:
-                label = f"ID:{track_id} {class_name} {confidence:.2f}"
-            label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
-            
-            # 绘制标签背景
-            cv2.rectangle(annotated_frame, 
-                         (int(x1), int(y1) - label_size[1] - 10), 
-                         (int(x1) + label_size[0], int(y1)), 
-                         color, -1)
-            
-            # 绘制标签文字
-            cv2.putText(annotated_frame, label, (int(x1), int(y1-5)), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
-            
-            # 绘制轨迹历史
-            if track_id in self.track_history and len(self.track_history[track_id]) > 1:
-                points = np.array(self.track_history[track_id], dtype=np.int32).reshape((-1, 1, 2))
-                cv2.polylines(annotated_frame, [points], isClosed=False, color=color, thickness=2)
-        
-        # 显示追踪器信息和FPS
-        cv2.putText(annotated_frame, "YOLO11 Person Tracker", (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (50, 170, 50), 2)
-        cv2.putText(annotated_frame, f"FPS: {int(current_fps)}", (10, 60),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (50, 170, 50), 2)
-        cv2.putText(annotated_frame, f"Targets: {len(tracked_objects)}", (10, 90),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (50, 170, 50), 2)
-        
-        # 显示追踪状态信息
-        status_text = f"Tracking: {TARGET_CLASS}"
-        tracking_id_text = f"Current ID: {self.tracked_person_id if self.tracked_person_id else 'None'}"
-        cv2.putText(annotated_frame, status_text, (10, 120),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
-        cv2.putText(annotated_frame, tracking_id_text, (10, 150),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
-        
-        cv2.imshow("YOLO11 Person Tracker", annotated_frame)
-        cv2.waitKey(1)
 
 
 def main():
@@ -427,14 +416,6 @@ def main():
         import traceback
         rospy.logdebug(f"错误详情:\n{traceback.format_exc()}")
     finally:
-        rospy.loginfo("开始清理资源...")
-        
-        try:
-            cv2.destroyAllWindows()
-            rospy.loginfo("OpenCV窗口已关闭")
-        except:
-            pass
-            
         rospy.loginfo("追踪节点已停止")
 
 

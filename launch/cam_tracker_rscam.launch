@@ -1,0 +1,24 @@
+<launch>
+  <!-- Launch文件参数 -->
+  <arg name="debug" default="false" doc="Enable debug logging" />
+  <arg name="show_image" default="false" doc="Show visualization window" />
+  <arg name="cam_topic" default="/camera/color/image_raw" />
+  <!-- 如果你已经在其他工作区/进程里启动了 RealSense 相机，请将该参数置为 false -->
+  <arg name="start_camera" default="false" />
+  
+  <!-- 仅在需要时启动 RealSense 相机；避免在未安装 realsense2_camera 包时解析失败 -->
+  <include if="$(arg start_camera)" file="$(find realsense2_camera)/launch/rs_camera.launch">
+    <!-- 设置彩色图像的宽度 -->
+    <arg name="color_width" value="640" />
+    <!-- 设置彩色图像的高度 -->
+    <arg name="color_height" value="480" />
+    <!-- 设置彩色图像的帧率 -->
+    <arg name="color_fps" value="30" />
+  </include>
+
+  <include file="$(find cam_tracker)/launch/cam_tracker.launch">
+    <arg name="cam_topic" value="$(arg cam_topic)" />
+    <arg name="debug" value="$(arg debug)" />
+    <arg name="show_image" value="$(arg show_image)" />
+  </include>
+</launch>

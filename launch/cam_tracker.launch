@@ -1,35 +1,21 @@
 <launch>
-  <!-- Launch文件参数 -->
-  <arg name="debug" default="false" doc="Enable debug logging" />
-  <arg name="show_image" default="false" doc="Show visualization window" />
-
-  <!-- USB摄像头节点 -->
-  <node name="usb_cam" pkg="usb_cam" type="usb_cam_node" output="log" respawn="false">
-    <param name="video_device" value="/dev/video0" />
-    <param name="image_width" value="640" />
-    <param name="image_height" value="480" />
-    <param name="pixel_format" value="yuyv" />
-    <param name="camera_frame_id" value="usb_cam" />
-    <param name="camera_name" value="head_camera" />
-    <param name="camera_info_url" value="" />
-    <param name="io_method" value="mmap"/>
-    <param name="framerate" value="15"/>
-    <!-- 设置环境变量来抑制FFmpeg警告 -->
-    <env name="FFMPEG_HIDE_BANNER" value="1" />
-    <env name="AV_LOG_FORCE_NOCOLOR" value="1" />
-    <!-- 移除可能导致问题的自动对焦参数 -->
-  </node>
+  <!-- 可配置参数 -->
+  <arg name="cam_topic" default="/usb_cam/image_raw" />
+  <arg name="show_image" default="false" />
+  <arg name="debug" default="false" />
 
   <!-- 延迟启动追踪节点，等摄像头稳定 -->
-  <node name="cam_tracker_node" pkg="cam_tracker" type="person_tracker_node.py" output="screen" 
+  <node name="cam_tracker_node" pkg="cam_tracker" type="cam_tracker_node.py" output="screen"
         respawn="false" launch-prefix="bash -c 'sleep 2; $0 $@' ">
+    <param name="cam_topic" value="$(arg cam_topic)" />
+
     <!-- YOLO模型参数 -->
-    <param name="confidence_threshold" value="0.80" />
-    <param name="show_image" value="$(arg show_image)" default="false" />
-    
+    <param name="confidence_threshold" value="0.75" />
+    <param name="show_image" value="$(arg show_image)" />
+
     <!-- 日志控制参数 -->
-    <param name="debug_mode" value="$(arg debug)" default="false" />
-    
+    <param name="debug_mode" value="$(arg debug)" />
+
     <!-- 追踪器参数 -->
     <param name="max_age" value="30" />
     <param name="min_hits" value="3" />
