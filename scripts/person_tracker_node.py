@@ -55,7 +55,7 @@ def setup_opencv_logging():
 class PersonTrackerNode:
     def __init__(self):
         """初始化Person追踪节点"""
-        rospy.init_node('person_tracker_node', anonymous=True)
+        rospy.init_node('cam_tracker_node', anonymous=True)
         rospy.loginfo("初始化追踪节点...")
         
         # 追踪状态

@@ -24,7 +24,7 @@
   <node name="cam_tracker_node" pkg="cam_tracker" type="person_tracker_node.py" output="screen" 
         respawn="false" launch-prefix="bash -c 'sleep 2; $0 $@' ">
     <!-- YOLO模型参数 -->
-    <param name="confidence_threshold" value="0.25" />
+    <param name="confidence_threshold" value="0.80" />
     <param name="show_image" value="$(arg show_image)" default="false" />
     
     <!-- 日志控制参数 -->

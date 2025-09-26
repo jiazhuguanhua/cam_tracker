@@ -7,22 +7,15 @@
 - 第一帧符合name的物体 -> Tracking
 - if lost track over 30 frames: update object id
 
-# 目前存在cam_tracker和person_tracker文件名混用情况，而二者为同一node，会在下个版本修复
-# 预计更新：加入KCF算法模式，提高对已有目标的追踪能力（ByteTracker的 Detect能力>Track）
+- 目前存在cam_tracker和person_tracker文件名混用情况，而二者为同一node，会在下个版本修复
+- 预计更新：加入KCF算法模式，提高对已有目标的追踪能力（ByteTracker的 Detect能力>Track）
+
+- 加入visualizer node,只支持rusrun运行
 # cam_tracker ROS包
 
 ## 🎯 功能概述
 
 **高性能实时多目标追踪系统**，基于YOLO11+ByteTrack算法，专为ROS机器人系统设计。
-
-### 核心特性
-- 🔥 **YOLO11检测** + **ByteTrack追踪**：业界领先的检测追踪算法
-- � **专用Person追踪**：智能锁定并追踪置信度最高的person目标 ⭐（可修改为多种支持的name）
-- 📡 **双话题架构**：同时输出简化单目标和完整多目标信息 ⭐
-- �🎮 **动态控制**：通过ROS话题实时启动/停止追踪器
-- 📊 **实时可视化**：边界框、追踪ID、运动轨迹显示
-- ⚡ **高性能**：支持CPU/GPU加速，优化的处理流程
-- 🔧 **易集成**：标准ROS接口，支持多种硬件平台
 
 ## 🖥️ 运行环境
 
@@ -79,22 +72,6 @@ rostopic list | grep detection
 rostopic hz /detection/single_target  # 检查发布频率
 ```
 
-## ⚙️ 配置参数
-
-### Launch文件参数
-```xml
-<!-- 模型配置 -->
-<param name="model_path" value="path/to/yolo11n.pt" />
-<param name="confidence_threshold" value="0.25" />
-
-<!-- 显示配置 -->
-<param name="show_image" value="false" />  <!-- 可视化开关 -->
-
-<!-- 摄像头配置 -->
-<param name="video_device" value="/dev/video0" />
-<param name="image_width" value="640" />
-<param name="image_height" value="480" />
-```
 默认使用CUDA，ultralytics系统会自动选择可用的设备。（CPU/GPU etc.）
 
 ### ROS参数动态配置
@@ -117,7 +94,7 @@ rosparam list | grep cam_tracker
 /tracker_action             # 追踪器控制 (std_msgs/Bool)
 
 # 发布话题  
-/detection/single_target    # 单目标检测结果 (cam_tracker/Detection)
+/detection/data    # 单目标检测结果 (cam_tracker/Detection)
 /detection/multi_target     # 多目标检测结果 (cam_tracker/DetectionArray)
 ```
 
