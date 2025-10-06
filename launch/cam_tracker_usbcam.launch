@@ -25,5 +25,6 @@
     <arg name="cam_topic" value="$(arg cam_topic)" />
     <arg name="debug" value="$(arg debug)" />
     <arg name="show_image" value="$(arg show_image)" />
+    <arg name="self_start" default= "true" />
   </include>
 </launch>

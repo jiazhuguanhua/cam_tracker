@@ -115,14 +115,19 @@ class PersonTrackerNode:
         # 定时器确保最小输出频率
         self.publish_timer = rospy.Timer(rospy.Duration(1.0/self.min_publish_rate), self.timer_publish_callback)
         
-        rospy.loginfo("话题配置完成:")
-        rospy.loginfo(f"  订阅: {self.cam_topic}")
-        rospy.loginfo("  订阅: /tracker_action")
-        rospy.loginfo("  发布: /detection/data (简化person信息)")
-        rospy.loginfo("  发布: /detection/multi_target (所有目标完整信息)")
-        rospy.loginfo(f"  输出频率: >= {self.min_publish_rate}Hz")
-        
-        rospy.loginfo("追踪器待机中，发送控制信号启动")
+        rospy.logdebug("话题配置完成:")
+        rospy.logdebug(f"  订阅: {self.cam_topic}")
+        rospy.logdebug("  订阅: /tracker_action")
+        rospy.logdebug("  发布: /detection/data (简化person信息)")
+        rospy.logdebug("  发布: /detection/multi_target (所有目标完整信息)")
+        rospy.logdebug(f"  输出频率: >= {self.min_publish_rate}Hz")
+
+        # Tracker自动触发
+        self.self_start = rospy.get_param('~self_start', "true")
+        if self.self_start == True:
+            self.tracker_on("Yaml Setting")
+        else:
+            rospy.loginfo("追踪器待机中，发送action控制信号启动...")
 
     def find_model_path(self):
         """自动查找YOLO模型文件路径"""
@@ -157,16 +162,20 @@ class PersonTrackerNode:
             rospy.logwarn(f"查找模型路径时出错: {e}")
             return 'yolo11n.pt'
 
+    def tracker_on(self, activated_by):
+        # 启动追踪器
+        self.tracker_enabled = True
+        self.tracked_person_id = None  # 重置追踪目标
+        self.last_publish_time = time.time()  # 重置发布时间
+        rospy.loginfo(f"追踪器由{activated_by}启动，开始寻找{TARGET_CLASS}目标")
+
     def tracker_action_callback(self, msg):
         """处理追踪器控制消息"""
         action = msg.data
         
         if action and not self.tracker_enabled:
             # 启动追踪器
-            self.tracker_enabled = True
-            self.tracked_person_id = None  # 重置追踪目标
-            self.last_publish_time = time.time()  # 重置发布时间
-            rospy.loginfo(f"追踪器已启动，开始寻找{TARGET_CLASS}目标")
+            self.tracker_on("action")
             
         elif not action and self.tracker_enabled:
             # 停止追踪器
@@ -399,7 +408,6 @@ def main():
         node_init_time = time.time() - node_start_time
         
         rospy.loginfo(f"节点初始化完成，耗时: {node_init_time:.2f}秒")
-        rospy.loginfo("开始监听图像话题，进入主循环...")
         
         # 进入ROS主循环
         try:
