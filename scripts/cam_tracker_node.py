@@ -22,14 +22,14 @@ from cam_tracker.msg import Detection, CompleteDetection, DetectionArray
 
 from ultralytics import YOLO
 
+# 目标追踪配置
+TARGET_CLASS = "tennis-ball"  # 追踪目标类型 red_brick tennis-ball
+MODEL_NAME = "tennis_best.pt"
+
 # 设置环境变量来抑制FFmpeg警告
 os.environ['FFMPEG_HIDE_BANNER'] = '1'
 os.environ['AV_LOG_FORCE_NOCOLOR'] = '1'
 os.environ['OPENCV_LOG_LEVEL'] = 'ERROR'
-
-# 目标追踪配置
-TARGET_CLASS = "red_brick"  # 追踪目标类型
-
 
 def setup_opencv_logging():
     """安全地设置OpenCV日志级别，兼容不同版本"""
@@ -140,7 +140,7 @@ class PersonTrackerNode:
             
             # 定义可能的模型路径（按优先级排序）
             possible_paths = [
-                os.path.join(package_path, 'models', 'nuaa_brick_best.pt'),
+                os.path.join(package_path, 'models', MODEL_NAME),
                 os.path.join(package_path, 'models', 'yolo11n.pt'),
                 os.path.join(package_path, 'yolo11n.pt'),
                 os.path.expanduser('~/models/yolo11n.pt'),

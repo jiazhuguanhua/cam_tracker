@@ -33,7 +33,7 @@ def main():
         queue_size=10
     )
     sub_video = rospy.Subscriber(
-        name="/camera/color/image_raw",
+        name="/usb_cam/image_raw",
         data_class=Image,
         callback=video_callback,
         queue_size=1
