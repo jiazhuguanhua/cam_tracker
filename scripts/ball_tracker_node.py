@@ -508,19 +508,64 @@ class BallTrackerNode:
                 self.last_seen_frame = self.current_frame
                 break
         
-        # 发布目标位置
-        self._publish_target(current_target, header)
-        
         # 检查目标是否丢失
         if current_target is None:
             missing_frames = self.current_frame - self.last_seen_frame
+            
             if missing_frames > MAX_MISSING_FRAMES:
-                rospy.logwarn(f"⚠️  目标丢失超过 {MAX_MISSING_FRAMES} 帧")
-                self.state = TrackerState.TARGET_LOST
-                self._publish_status("目标丢失")
+                # 目标丢失超过阈值
+                if self.state != TrackerState.TARGET_LOST:
+                    rospy.logwarn(f"⚠️  目标丢失超过 {MAX_MISSING_FRAMES} 帧，进入搜索模式")
+                    self.state = TrackerState.TARGET_LOST
+                    self._publish_status("目标丢失 - 积极搜索中")
                 
-                # 尝试重新选择目标
-                self._reselect_target(tracked_objects)
+                # 发布ID为-1，表示目标丢失（但继续输出最近位置）
+                self._publish_target(None, header, force_invalid=True)
+                
+                # 积极检测 - 尝试从当前检测到的目标中重新选择
+                self._try_reacquire_target(tracked_objects)
+            else:
+                # 目标暂时丢失（未超过阈值），继续发布最近数据
+                self._publish_target(None, header)
+        else:
+            # 找到目标，正常发布
+            if self.state == TrackerState.TARGET_LOST:
+                rospy.loginfo("✅ 目标已恢复追踪")
+                self.state = TrackerState.TRACKING
+                self._publish_status(f"追踪目标 ID:{self.tracked_target_id}")
+            
+            self._publish_target(current_target, header)
+    
+    def _try_reacquire_target(self, tracked_objects: List[Dict]):
+        """
+        尝试重新获取目标（积极检测模式）
+        
+        Args:
+            tracked_objects: 当前检测到的所有目标
+        """
+        target_objects = [obj for obj in tracked_objects if obj['class_name'] == TARGET_CLASS]
+        
+        if target_objects:
+            # 找到目标类型的物体，重新选择
+            new_target = self._select_edge_target(target_objects)
+            if new_target:
+                old_id = self.tracked_target_id
+                self.tracked_target_id = new_target['track_id']
+                self.last_seen_frame = self.current_frame
+                self.state = TrackerState.TRACKING
+                
+                rospy.loginfo("=" * 70)
+                rospy.loginfo(f"🎯 重新捕获目标:")
+                rospy.loginfo(f"   旧ID: {old_id} → 新ID: {self.tracked_target_id}")
+                rospy.loginfo(f"   置信度: {new_target['confidence']:.3f}")
+                rospy.loginfo(f"   位置: ({new_target['center_x']:.1f}, {new_target['center_y']:.1f})")
+                rospy.loginfo("=" * 70)
+                
+                self._publish_status(f"已恢复追踪 ID:{self.tracked_target_id}")
+            else:
+                rospy.logdebug("未找到合适的边缘目标，继续搜索...")
+        else:
+            rospy.logdebug(f"未检测到 {TARGET_CLASS} 类型目标，继续搜索...")
     
     def _reselect_target(self, tracked_objects: List[Dict]):
         """
@@ -597,13 +642,14 @@ class BallTrackerNode:
         
         return objects
     
-    def _publish_target(self, target: Optional[Dict], header: Optional[Header] = None):
+    def _publish_target(self, target: Optional[Dict], header: Optional[Header] = None, force_invalid: bool = False):
         """
         发布当前追踪目标的位置信息
         
         Args:
             target: 目标对象，None表示无目标
             header: ROS消息头
+            force_invalid: 强制设置为无效目标（ID=-1），用于目标丢失情况
         """
         detection = Detection()
         
@@ -620,11 +666,18 @@ class BallTrackerNode:
             }
             
             rospy.logdebug(
-                f"📡 发布目标位置: ({detection.detection_x:.1f}, {detection.detection_y:.1f})"
+                f"📡 发布目标位置: ID=1, ({detection.detection_x:.1f}, {detection.detection_y:.1f})"
             )
         else:
-            # 无目标：发布最近的位置数据
-            detection.detection_id = 0  # 无效目标
+            # 无目标：根据force_invalid参数决定ID
+            if force_invalid:
+                # 目标已丢失超过阈值，使用ID=-1
+                detection.detection_id = -1
+                rospy.logdebug("📡 发布丢失状态: ID=-1 (积极搜索中)")
+            else:
+                # 目标暂时丢失，使用ID=0
+                detection.detection_id = 0
+                rospy.logdebug("📡 发布暂时丢失: ID=0 (使用最近数据)")
             
             if self.last_target_data:
                 detection.detection_x = self.last_target_data['center_x']
