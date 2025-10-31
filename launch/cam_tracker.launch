@@ -6,7 +6,7 @@
   <arg name="self_start" default= "true" />
 
   <!-- 延迟启动追踪节点，等摄像头稳定 -->
-  <node name="cam_tracker_node" pkg="cam_tracker" type="cam_tracker_node.py" output="screen"
+  <node name="cam_tracker_node" pkg="cam_tracker" type="ball_tracker_node.py" output="screen"
         respawn="false" launch-prefix="bash -c 'sleep 2; $0 $@' ">
     <param name="cam_topic" value="$(arg cam_topic)" />
 

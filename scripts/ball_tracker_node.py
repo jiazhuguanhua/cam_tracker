@@ -41,8 +41,9 @@ from ultralytics import YOLO
 # ==================== 配置参数 ====================
 
 # 目标类型配置
-TARGET_CLASS = "sports ball"  # YOLO类别名称，可选: "sports ball", "orange", "apple" 等
-MODEL_NAME = "yolo11n.pt"  # 模型文件名
+
+TARGET_CLASS = "tennis-ball"  # 追踪目标类型 red_brick tennis-ball
+MODEL_NAME = "tennis_best.pt"
 
 # 边缘检测参数
 EDGE_MARGIN_RATIO = 0.25  # 边缘区域占图像的比例 (0.25 = 图像四周25%区域)
