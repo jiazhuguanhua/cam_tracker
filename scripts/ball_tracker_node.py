@@ -52,6 +52,9 @@ EDGE_MARGIN_RATIO = 0.25  # 边缘区域占图像的比例 (0.25 = 图像四周2
 MAX_MISSING_FRAMES = 30  # 目标丢失超过此帧数后重新选择
 MIN_PUBLISH_RATE = 20.0  # 最小发布频率 (Hz)
 
+# 夹爪区域参数
+GRIPPER_ZONE_Y_RATIO = 0.6  # 分界线Y坐标占图像高度的比例（0.6表示图像60%位置的水平线）
+
 # 环境变量设置
 os.environ['FFMPEG_HIDE_BANNER'] = '1'
 os.environ['AV_LOG_FORCE_NOCOLOR'] = '1'
@@ -185,11 +188,13 @@ class BallTrackerNode:
         self.edge_margin_ratio = rospy.get_param('~edge_margin_ratio', EDGE_MARGIN_RATIO)
         self.min_publish_rate = rospy.get_param('~min_publish_rate', MIN_PUBLISH_RATE)
         self.auto_start = rospy.get_param('~auto_start', False)
+        self.gripper_zone_y_ratio = rospy.get_param('~gripper_zone_y_ratio', GRIPPER_ZONE_Y_RATIO)
         
         rospy.loginfo(f"📷 相机话题: {self.camera_topic}")
         rospy.loginfo(f"🎯 目标类型: {TARGET_CLASS}")
         rospy.loginfo(f"📊 置信度阈值: {self.confidence_threshold}")
         rospy.loginfo(f"🔲 边缘区域比例: {self.edge_margin_ratio}")
+        rospy.loginfo(f"✂️  夹爪区域分界线: {self.gripper_zone_y_ratio * 100:.0f}%")
         
         # ========== 初始化YOLO模型 ==========
         setup_opencv_logging()
@@ -653,20 +658,28 @@ class BallTrackerNode:
         """
         detection = Detection()
         
+        # 计算夹爪区域分界线的Y坐标
+        gripper_zone_y = self.image_height * self.gripper_zone_y_ratio
+        
         if target is not None:
             # 有目标：发布当前位置
             detection.detection_id = 1  # 有效目标
             detection.detection_x = target['center_x']
             detection.detection_y = target['center_y']
             
+            # 判断是否在夹取区域（中心在分界线下方）
+            detection.in_gripper_zone = (target['center_y'] > gripper_zone_y)
+            
             # 保存最新数据
             self.last_target_data = {
                 'center_x': target['center_x'],
-                'center_y': target['center_y']
+                'center_y': target['center_y'],
+                'in_gripper_zone': detection.in_gripper_zone
             }
             
+            zone_status = "✓ 在夹取区域" if detection.in_gripper_zone else "✗ 不在夹取区域"
             rospy.logdebug(
-                f"📡 发布目标位置: ID=1, ({detection.detection_x:.1f}, {detection.detection_y:.1f})"
+                f"📡 发布目标位置: ID=1, ({detection.detection_x:.1f}, {detection.detection_y:.1f}) {zone_status}"
             )
         else:
             # 无目标：根据force_invalid参数决定ID
@@ -682,9 +695,11 @@ class BallTrackerNode:
             if self.last_target_data:
                 detection.detection_x = self.last_target_data['center_x']
                 detection.detection_y = self.last_target_data['center_y']
+                detection.in_gripper_zone = self.last_target_data.get('in_gripper_zone', False)
             else:
                 detection.detection_x = 0.0
                 detection.detection_y = 0.0
+                detection.in_gripper_zone = False
         
         self.target_pub.publish(detection)
         self.last_publish_time = time.time()
