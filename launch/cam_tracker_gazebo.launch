@@ -1,0 +1,13 @@
+<launch>
+  <!-- Launch文件参数 -->
+  <arg name="cam_topic" default="/iris_0/realsense/depth_camera/color/image_raw" />
+  <arg name="show_image" default="false" />
+  <arg name="debug" default="false" />
+
+  <include file="$(find cam_tracker)/launch/cam_tracker.launch">
+    <arg name="cam_topic" value="$(arg cam_topic)" />
+    <arg name="debug" value="$(arg debug)" />
+    <arg name="show_image" value="$(arg show_image)" />
+    <arg name="self_start" default= "false" />
+  </include>
+</launch>
