@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- 
+    Cam Tracker Launch File
+    启动摄像头检测与可视化节点
+  -->
+
+  <!-- 参数配置 -->
+  <arg name="camera_topic" default="/usb_cam/image_raw" />
+  <arg name="confidence_threshold" default="0.5" />
+  <arg name="iou_threshold" default="0.45" />
+  <arg name="max_det" default="100" />
+  <arg name="tracker_type" default="bytetrack.yaml" />
+  <arg name="publish_rate" default="20.0" />
+  
+  <!-- 启动检测节点 -->
+  <node name="cam_tracker_node" pkg="cam_tracker" type="cam_tracker_node.py" output="screen">
+    <param name="camera_topic" value="$(arg camera_topic)" />
+    <param name="confidence_threshold" value="$(arg confidence_threshold)" />
+    <param name="iou_threshold" value="$(arg iou_threshold)" />
+    <param name="max_det" value="$(arg max_det)" />
+    <param name="tracker_type" value="$(arg tracker_type)" />
+    <param name="publish_rate" value="$(arg publish_rate)" />
+  </node>
+
+  <!-- 启动可视化节点 -->
+  <node name="cam_tracker_visualizer" pkg="cam_tracker" type="visualizer_node_new.py" output="screen">
+    <param name="camera_topic" value="$(arg camera_topic)" />
+  </node>
+
+  <!-- 显示启动信息 -->
+  <node name="launch_info" pkg="rostopic" type="rostopic" args="echo /cam_tracker/info -n 1" output="screen" launch-prefix="bash -c 'sleep 3; $0 $@' " />
+
+</launch>
