@@ -7,7 +7,7 @@ echo "Cam Tracker 快速启动"
 echo "=================================="
 
 # 设置工作空间路径
-WORKSPACE_PATH=~/drone_uavgp_ws
+WORKSPACE_PATH=~/drone_ws
 
 echo "✅ 切换到工作空间: $WORKSPACE_PATH"
 cd $WORKSPACE_PATH

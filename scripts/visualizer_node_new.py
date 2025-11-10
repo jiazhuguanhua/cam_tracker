@@ -2,432 +2,227 @@
 # -*- coding: utf-8 -*-
 
 """
-Cam Tracker Visualizer Node - 检测可视化节点
-===========================================
-
-功能说明：
-1. 实时显示ball和car的检测结果
-2. 显示检测框、类别标签、追踪ID、置信度
-3. 显示系统状态和性能指标
-4. 支持键盘控制
-
-话题订阅：
-- /usb_cam/image_raw: 摄像头图像
-- /cam_tracker/info: 检测结果信息
-
-键盘控制：
-- 'q': 退出
-- 'p': 暂停/继续
-- 's': 保存截图
-- 'h': 显示/隐藏帮助信息
-- 'd': 显示/隐藏详细信息
-
-作者: ROS Developer
-日期: 2025-11-09
-版本: 3.0.0
+Cam Tracker Visualizer Node (Optimized UI - English)
+Features:
+1. Subscribe to /usb_cam/image_raw for camera image
+2. Subscribe to /cam_tracker/info for detection info (ball and car positions)
+3. Display real-time visualization with OpenCV window
 """
 
 import rospy
 import cv2
 import numpy as np
-import os
-import time
-from typing import Optional
-from collections import deque
-
 from sensor_msgs.msg import Image
-from cv_bridge import CvBridge, CvBridgeError
+from cv_bridge import CvBridge
 from cam_tracker.msg import CamTrack
 
-# ==================== 配置参数 ====================
-
-# 显示参数
-WINDOW_NAME = "Cam Tracker Visualizer"
-WINDOW_WIDTH = 1280
-WINDOW_HEIGHT = 720
-
-# 颜色定义 (BGR格式)
-COLOR_BALL = (0, 255, 0)            # 绿色 - Ball
-COLOR_CAR = (255, 0, 0)             # 蓝色 - Car
-COLOR_TARGET_BALL = (0, 255, 255)   # 黄色 - 目标Ball
-COLOR_TEXT = (255, 255, 255)        # 白色 - 文字
-COLOR_BG = (0, 0, 0)                # 黑色 - 背景
-COLOR_OK = (0, 255, 0)              # 绿色 - 正常状态
-COLOR_ERROR = (0, 0, 255)           # 红色 - 错误状态
-
-# 绘制参数
-BOX_THICKNESS = 2
-CIRCLE_RADIUS = 8
-TEXT_FONT = cv2.FONT_HERSHEY_SIMPLEX
-TEXT_SCALE = 0.6
-TEXT_THICKNESS = 2
-
-# 性能监控
-FPS_BUFFER_SIZE = 30
-
-
-# ==================== 工具函数 ====================
-
-def draw_text_with_background(img, text, pos, font_scale=TEXT_SCALE, thickness=TEXT_THICKNESS,
-                               text_color=COLOR_TEXT, bg_color=COLOR_BG, padding=5):
-    """绘制带背景的文字"""
-    x, y = pos
-    (text_width, text_height), baseline = cv2.getTextSize(
-        text, TEXT_FONT, font_scale, thickness
-    )
-    
-    cv2.rectangle(
-        img,
-        (x - padding, y - text_height - padding),
-        (x + text_width + padding, y + baseline + padding),
-        bg_color,
-        -1
-    )
-    
-    cv2.putText(
-        img, text, (x, y),
-        TEXT_FONT, font_scale, text_color, thickness, cv2.LINE_AA
-    )
-    
-    return text_height + baseline + 2 * padding
-
-
-# ==================== 主节点类 ====================
 
 class CamTrackerVisualizer:
-    """检测可视化节点"""
-    
     def __init__(self):
-        """初始化节点"""
+        """Initialize visualizer node"""
         rospy.init_node('cam_tracker_visualizer', anonymous=True)
         
-        rospy.loginfo("=" * 70)
-        rospy.loginfo("🎥 Cam Tracker可视化节点启动中...")
-        rospy.loginfo("=" * 70)
-        
-        # ========== 状态变量 ==========
-        self.latest_image = None
-        self.cam_track_data = None
-        
-        self.paused = False
-        self.show_help = True
-        self.show_details = True
-        
-        # 性能监控
-        self.fps_buffer = deque(maxlen=FPS_BUFFER_SIZE)
-        self.last_frame_time = time.time()
-        self.frame_count = 0
-        
-        # ========== ROS参数 ==========
-        self.camera_topic = rospy.get_param('~camera_topic', '/usb_cam/image_raw')
-        
-        rospy.loginfo(f"📷 相机话题: {self.camera_topic}")
-        
-        # ========== 初始化ROS通信 ==========
+        # OpenCV bridge
         self.bridge = CvBridge()
         
-        # 订阅器
-        self.image_sub = rospy.Subscriber(
-            self.camera_topic,
-            Image,
-            self._image_callback,
-            queue_size=1,
-            buff_size=2**24
-        )
+        # Store latest data
+        self.latest_image = None
+        self.latest_detection = None
         
-        self.info_sub = rospy.Subscriber(
-            '/cam_tracker/info',
-            CamTrack,
-            self._info_callback,
-            queue_size=10
-        )
+        # Create OpenCV window
+        self.window_name = "Cam Tracker Visualizer"
+        cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(self.window_name, 1280, 720)
         
-        rospy.loginfo("=" * 70)
-        rospy.loginfo("✅ 节点初始化完成")
-        rospy.loginfo("📡 订阅话题:")
-        rospy.loginfo(f"   {self.camera_topic}")
-        rospy.loginfo(f"   /cam_tracker/info")
-        rospy.loginfo("=" * 70)
-        rospy.loginfo("⌨️  键盘控制:")
-        rospy.loginfo("   'q': 退出")
-        rospy.loginfo("   'p': 暂停/继续")
-        rospy.loginfo("   's': 保存截图")
-        rospy.loginfo("   'h': 显示/隐藏帮助")
-        rospy.loginfo("   'd': 显示/隐藏详细信息")
-        rospy.loginfo("=" * 70)
+        # Subscribe to topics
+        rospy.Subscriber('/usb_cam/image_raw', Image, self.image_callback, queue_size=1)
+        rospy.Subscriber('/cam_tracker/info', CamTrack, self.detection_callback, queue_size=1)
+        
+        rospy.loginfo("=== Cam Tracker Visualizer Started ===")
+        rospy.loginfo("Subscribe: /usb_cam/image_raw")
+        rospy.loginfo("Subscribe: /cam_tracker/info")
+        rospy.loginfo("Press 'q' to quit, 's' to save screenshot")
     
-    # ==================== 回调函数 ====================
-    
-    def _image_callback(self, msg: Image):
-        """图像回调"""
+    def image_callback(self, msg):
+        """Receive and convert image"""
         try:
             self.latest_image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
-        except CvBridgeError as e:
-            rospy.logerr(f"图像转换错误: {e}")
+        except Exception as e:
+            rospy.logerr(f"Image conversion failed: {e}")
     
-    def _info_callback(self, msg: CamTrack):
-        """检测信息回调"""
-        self.cam_track_data = msg
+    def detection_callback(self, msg):
+        """Receive detection info"""
+        self.latest_detection = msg
     
-    # ==================== 绘制方法 ====================
-    
-    def _draw_balls(self, img):
-        """绘制ball检测结果"""
-        if self.cam_track_data is None or self.cam_track_data.ball_num == 0:
-            return
+    def draw_detections(self, image):
+        """Draw detection results on image with enhanced UI"""
+        if self.latest_detection is None:
+            cv2.putText(image, "Waiting for detection data...", (20, 50), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 255), 2)
+            return image
         
-        # 绘制目标ball（最适合抓取的）
-        x = int(self.cam_track_data.ball_x)
-        y = int(self.cam_track_data.ball_y)
+        det = self.latest_detection
+        h, w = image.shape[:2]
         
-        # 绘制圆圈标记
-        cv2.circle(img, (x, y), CIRCLE_RADIUS, COLOR_TARGET_BALL, -1)
-        cv2.circle(img, (x, y), CIRCLE_RADIUS + 5, COLOR_TARGET_BALL, 2)
+        # === Draw top status bar with semi-transparent background ===
+        overlay = image.copy()
+        cv2.rectangle(overlay, (0, 0), (w, 120), (40, 40, 40), -1)
+        cv2.addWeighted(overlay, 0.7, image, 0.3, 0, image)
         
-        # 绘制十字准星
-        cross_size = 20
-        cv2.line(img, (x - cross_size, y), (x + cross_size, y), COLOR_TARGET_BALL, 2)
-        cv2.line(img, (x, y - cross_size), (x, y + cross_size), COLOR_TARGET_BALL, 2)
+        # Draw separator line
+        cv2.line(image, (0, 120), (w, 120), (100, 100, 100), 2)
         
-        # 绘制标签
-        label = f"TARGET BALL ({x}, {y})"
-        draw_text_with_background(
-            img, label, (x + 25, y - 10),
-            font_scale=0.6, thickness=2, text_color=COLOR_TARGET_BALL
-        )
+        # System status with icon
+        status_color = (0, 255, 0) if det.system_ok else (0, 0, 255)
+        status_text = "System: OK" if det.system_ok else "System: ERROR"
+        cv2.circle(image, (30, 35), 8, status_color, -1)
+        cv2.putText(image, status_text, (50, 45), 
+                   cv2.FONT_HERSHEY_DUPLEX, 0.9, status_color, 2)
         
-        # 如果有多个ball，显示数量
-        if self.cam_track_data.ball_num > 1:
-            count_label = f"Total: {self.cam_track_data.ball_num} balls"
-            draw_text_with_background(
-                img, count_label, (x + 25, y + 15),
-                font_scale=0.5, thickness=1, text_color=COLOR_BALL
-            )
-    
-    def _draw_cars(self, img):
-        """绘制car检测结果"""
-        if self.cam_track_data is None or self.cam_track_data.car_num == 0:
-            return
+        # Ball count with icon
+        cv2.circle(image, (30, 85), 12, (0, 255, 255), 2)
+        cv2.putText(image, f"Ball: {det.ball_num}", (50, 95), 
+                   cv2.FONT_HERSHEY_DUPLEX, 0.9, (0, 255, 255), 2)
         
-        # 绘制所有car
-        for i in range(self.cam_track_data.car_num):
-            x = int(self.cam_track_data.car_x[i])
-            y = int(self.cam_track_data.car_y[i])
-            
-            # 绘制圆圈标记
-            cv2.circle(img, (x, y), CIRCLE_RADIUS, COLOR_CAR, -1)
-            cv2.circle(img, (x, y), CIRCLE_RADIUS + 5, COLOR_CAR, 2)
-            
-            # 绘制标签
-            label = f"CAR #{i} ({x}, {y})"
-            draw_text_with_background(
-                img, label, (x + 20, y - 10),
-                font_scale=0.5, thickness=1, text_color=COLOR_CAR
-            )
-    
-    def _draw_info_panel(self, img):
-        """绘制信息面板"""
-        # 计算FPS
-        current_time = time.time()
-        frame_time = current_time - self.last_frame_time
-        self.last_frame_time = current_time
-        self.fps_buffer.append(1.0 / frame_time if frame_time > 0 else 0)
-        avg_fps = np.mean(self.fps_buffer) if len(self.fps_buffer) > 0 else 0
+        # Car count with icon
+        cv2.rectangle(image, (230, 73), (254, 97), (255, 0, 255), 2)
+        cv2.putText(image, f"Car: {det.car_num}", (265, 95), 
+                   cv2.FONT_HERSHEY_DUPLEX, 0.9, (255, 0, 255), 2)
         
-        # 系统状态
-        if self.cam_track_data:
-            system_status = "OK" if self.cam_track_data.system_ok else "ERROR"
-            status_color = COLOR_OK if self.cam_track_data.system_ok else COLOR_ERROR
+        # Gripper status with icon
+        gripper_text = "Gripper: CLOSED" if det.in_gripper else "Gripper: OPEN"
+        gripper_color = (0, 200, 255) if det.in_gripper else (150, 150, 150)
+        gripper_x = 470
+        # Draw simple gripper icon
+        if det.in_gripper:
+            cv2.rectangle(image, (gripper_x, 80), (gripper_x+10, 92), gripper_color, -1)
         else:
-            system_status = "WAITING"
-            status_color = (255, 255, 0)  # 黄色
+            cv2.rectangle(image, (gripper_x, 80), (gripper_x+4, 92), gripper_color, -1)
+            cv2.rectangle(image, (gripper_x+16, 80), (gripper_x+20, 92), gripper_color, -1)
+        cv2.putText(image, gripper_text, (gripper_x+30, 95), 
+                   cv2.FONT_HERSHEY_DUPLEX, 0.9, gripper_color, 2)
         
-        # 准备信息文本
-        info_lines = [
-            f"FPS: {avg_fps:.1f}",
-            f"Frame: {self.frame_count}",
-            f"System: {system_status}",
-        ]
-        
-        if self.show_details and self.cam_track_data:
-            info_lines.append(f"Balls: {self.cam_track_data.ball_num}")
-            info_lines.append(f"Cars: {self.cam_track_data.car_num}")
+        # === Draw Ball detection (Yellow) ===
+        if det.ball_num > 0:
+            bx, by = int(det.ball_x), int(det.ball_y)
             
-            if self.cam_track_data.ball_num > 0:
-                info_lines.append(f"Target Ball: ({self.cam_track_data.ball_x:.1f}, {self.cam_track_data.ball_y:.1f})")
+            # Outer circle with glow effect
+            cv2.circle(image, (bx, by), 45, (0, 200, 200), 1)
+            cv2.circle(image, (bx, by), 38, (0, 255, 255), 3)
+            cv2.circle(image, (bx, by), 6, (0, 255, 255), -1)
+            
+            # Crosshair
+            line_len = 25
+            cv2.line(image, (bx - line_len, by), (bx + line_len, by), (0, 255, 255), 2)
+            cv2.line(image, (bx, by - line_len), (bx, by + line_len), (0, 255, 255), 2)
+            
+            # Label with background
+            label = f"Ball ({bx}, {by})"
+            (label_w, label_h), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_DUPLEX, 0.8, 2)
+            label_x, label_y = bx + 55, by - 15
+            # Draw background with border
+            cv2.rectangle(image, (label_x - 5, label_y - label_h - 5), 
+                         (label_x + label_w + 5, label_y + baseline + 5), (0, 0, 0), -1)
+            cv2.rectangle(image, (label_x - 5, label_y - label_h - 5), 
+                         (label_x + label_w + 5, label_y + baseline + 5), (0, 255, 255), 2)
+            cv2.putText(image, label, (label_x, label_y), 
+                       cv2.FONT_HERSHEY_DUPLEX, 0.8, (0, 255, 255), 2)
         
-        # 绘制信息面板
-        panel_x = 10
-        panel_y = 30
+        # === Draw Car detection (Magenta) ===
+        if det.car_num > 0:
+            for i in range(det.car_num):
+                cx, cy = int(det.car_x[i]), int(det.car_y[i])
+                
+                # Double rectangle with glow effect
+                cv2.rectangle(image, (cx - 55, cy - 55), (cx + 55, cy + 55), (200, 0, 200), 1)
+                cv2.rectangle(image, (cx - 48, cy - 48), (cx + 48, cy + 48), (255, 0, 255), 3)
+                cv2.circle(image, (cx, cy), 6, (255, 0, 255), -1)
+                
+                # Corner markers
+                corner_len = 15
+                # Top-left
+                cv2.line(image, (cx - 48, cy - 48), (cx - 48 + corner_len, cy - 48), (255, 0, 255), 3)
+                cv2.line(image, (cx - 48, cy - 48), (cx - 48, cy - 48 + corner_len), (255, 0, 255), 3)
+                # Top-right
+                cv2.line(image, (cx + 48, cy - 48), (cx + 48 - corner_len, cy - 48), (255, 0, 255), 3)
+                cv2.line(image, (cx + 48, cy - 48), (cx + 48, cy - 48 + corner_len), (255, 0, 255), 3)
+                # Bottom-left
+                cv2.line(image, (cx - 48, cy + 48), (cx - 48 + corner_len, cy + 48), (255, 0, 255), 3)
+                cv2.line(image, (cx - 48, cy + 48), (cx - 48, cy + 48 - corner_len), (255, 0, 255), 3)
+                # Bottom-right
+                cv2.line(image, (cx + 48, cy + 48), (cx + 48 - corner_len, cy + 48), (255, 0, 255), 3)
+                cv2.line(image, (cx + 48, cy + 48), (cx + 48, cy + 48 - corner_len), (255, 0, 255), 3)
+                
+                # Label with background
+                label = f"Car#{i+1} ({cx}, {cy})"
+                (label_w, label_h), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_DUPLEX, 0.8, 2)
+                label_x, label_y = cx + 65, cy - 15
+                # Draw background with border
+                cv2.rectangle(image, (label_x - 5, label_y - label_h - 5), 
+                             (label_x + label_w + 5, label_y + baseline + 5), (0, 0, 0), -1)
+                cv2.rectangle(image, (label_x - 5, label_y - label_h - 5), 
+                             (label_x + label_w + 5, label_y + baseline + 5), (255, 0, 255), 2)
+                cv2.putText(image, label, (label_x, label_y), 
+                           cv2.FONT_HERSHEY_DUPLEX, 0.8, (255, 0, 255), 2)
         
-        for line in info_lines:
-            if "System:" in line:
-                panel_y += draw_text_with_background(
-                    img, line, (panel_x, panel_y),
-                    text_color=status_color
-                )
-            else:
-                panel_y += draw_text_with_background(
-                    img, line, (panel_x, panel_y)
-                )
-    
-    def _draw_help(self, img):
-        """绘制帮助信息"""
-        if not self.show_help:
-            return
-        
-        height, width = img.shape[:2]
-        
-        help_lines = [
-            "Keyboard Controls:",
-            "  Q - Quit",
-            "  P - Pause/Resume",
-            "  S - Save Screenshot",
-            "  H - Toggle Help",
-            "  D - Toggle Details",
-        ]
-        
-        # 在右上角绘制
-        help_x = width - 250
-        help_y = 30
-        
-        for line in help_lines:
-            help_y += draw_text_with_background(
-                img, line, (help_x, help_y),
-                font_scale=0.5, thickness=1
-            )
-    
-    def _draw_paused_overlay(self, img):
-        """绘制暂停提示"""
-        if not self.paused:
-            return
-        
-        height, width = img.shape[:2]
-        
-        # 半透明黑色遮罩
-        overlay = img.copy()
-        cv2.rectangle(overlay, (0, 0), (width, height), (0, 0, 0), -1)
-        cv2.addWeighted(overlay, 0.3, img, 0.7, 0, img)
-        
-        # 暂停文字
-        text = "PAUSED - Press 'P' to Resume"
-        (text_width, text_height), _ = cv2.getTextSize(
-            text, TEXT_FONT, 1.5, 3
-        )
-        x = (width - text_width) // 2
-        y = (height + text_height) // 2
-        
-        draw_text_with_background(
-            img, text, (x, y),
-            font_scale=1.5, thickness=3,
-            text_color=(0, 255, 255)
-        )
-    
-    # ==================== 主循环 ====================
+        return image
     
     def run(self):
-        """主循环"""
-        rospy.loginfo("🚀 可视化节点运行中...")
+        """Main loop: display images"""
+        rospy.loginfo("Visualizer node is running...")
         
-        cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
-        cv2.resizeWindow(WINDOW_NAME, WINDOW_WIDTH, WINDOW_HEIGHT)
-        
-        rate = rospy.Rate(50)  # 50 Hz
+        rate = rospy.Rate(30)  # 30Hz refresh rate
         
         while not rospy.is_shutdown():
             if self.latest_image is not None:
-                self.frame_count += 1
+                # Copy image for drawing
+                display_image = self.latest_image.copy()
                 
-                # 创建显示图像
-                display_img = self.latest_image.copy()
+                # Draw detection results
+                display_image = self.draw_detections(display_image)
                 
-                if not self.paused:
-                    # 绘制检测结果
-                    self._draw_balls(display_img)
-                    self._draw_cars(display_img)
+                # Display image
+                cv2.imshow(self.window_name, display_image)
                 
-                # 绘制信息
-                self._draw_info_panel(display_img)
-                self._draw_help(display_img)
-                self._draw_paused_overlay(display_img)
-                
-                # 显示图像
-                cv2.imshow(WINDOW_NAME, display_img)
-            
-            # 处理键盘输入
-            key = cv2.waitKey(1) & 0xFF
-            
-            if key == ord('q'):
-                rospy.loginfo("⌨️  按下'q'，退出程序")
-                break
-            elif key == ord('p'):
-                self.paused = not self.paused
-                status = "暂停" if self.paused else "继续"
-                rospy.loginfo(f"⏸️  {status}")
-            elif key == ord('s'):
-                self._save_screenshot()
-            elif key == ord('h'):
-                self.show_help = not self.show_help
-                status = "显示" if self.show_help else "隐藏"
-                rospy.loginfo(f"ℹ️  {status}帮助信息")
-            elif key == ord('d'):
-                self.show_details = not self.show_details
-                status = "显示" if self.show_details else "隐藏"
-                rospy.loginfo(f"📊 {status}详细信息")
+                # Handle keyboard input
+                key = cv2.waitKey(1) & 0xFF
+                if key == ord('q'):
+                    rospy.loginfo("User pressed 'q', exiting node")
+                    break
+                elif key == ord('s'):
+                    # Save screenshot
+                    filename = f"/tmp/cam_tracker_{rospy.Time.now().to_sec():.0f}.jpg"
+                    cv2.imwrite(filename, display_image)
+                    rospy.loginfo(f"Screenshot saved: {filename}")
+            else:
+                # Show waiting screen when no image data
+                waiting_image = 50 * np.ones((480, 640, 3), dtype=np.uint8)
+                cv2.putText(waiting_image, "Waiting for camera data...", (120, 220), 
+                           cv2.FONT_HERSHEY_DUPLEX, 1.0, (0, 255, 255), 2)
+                cv2.putText(waiting_image, "Subscribing to /usb_cam/image_raw", (80, 260), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (150, 150, 150), 1)
+                cv2.imshow(self.window_name, waiting_image)
+                cv2.waitKey(1)
             
             rate.sleep()
         
-        self.shutdown()
-    
-    def _save_screenshot(self):
-        """保存当前帧为图片"""
-        if self.latest_image is None:
-            rospy.logwarn("⚠️  没有可用的图像")
-            return
-        
-        from datetime import datetime
-        
-        # 创建截图目录
-        screenshot_dir = os.path.expanduser("~/tracker_screenshots")
-        os.makedirs(screenshot_dir, exist_ok=True)
-        
-        # 生成文件名
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"screenshot_{timestamp}.png"
-        filepath = os.path.join(screenshot_dir, filename)
-        
-        # 保存图像
-        display_img = self.latest_image.copy()
-        self._draw_balls(display_img)
-        self._draw_cars(display_img)
-        self._draw_info_panel(display_img)
-        
-        cv2.imwrite(filepath, display_img)
-        rospy.loginfo(f"📸 截图已保存: {filepath}")
-    
-    def shutdown(self):
-        """关闭节点"""
-        rospy.loginfo("🛑 关闭可视化节点...")
+        # Cleanup
         cv2.destroyAllWindows()
-        rospy.loginfo("✅ 节点已关闭")
 
-
-# ==================== 主函数 ====================
 
 def main():
-    """主函数"""
     try:
         visualizer = CamTrackerVisualizer()
         visualizer.run()
     except rospy.ROSInterruptException:
-        rospy.loginfo("🛑 ROS中断")
+        rospy.loginfo("Node interrupted")
     except Exception as e:
-        rospy.logerr(f"❌ 节点启动失败: {e}")
+        rospy.logerr(f"Node exception: {e}")
         import traceback
-        rospy.logerr(traceback.format_exc())
+        traceback.print_exc()
     finally:
         cv2.destroyAllWindows()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

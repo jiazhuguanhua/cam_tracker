@@ -50,13 +50,17 @@ find_package(catkin REQUIRED COMPONENTS
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
+# add_message_files(
+#   FILES
 add_message_files(
   FILES
-  Detection.msg
-  CompleteDetection.msg
-  DetectionArray.msg
+  CamTrack.msg
 )
-
+#   Detection.msg
+#   CompleteDetection.msg
+#   DetectionArray.msg
+# )
+# 
 ## Generate services in the 'srv' folder
 # add_service_files(
 #   FILES
