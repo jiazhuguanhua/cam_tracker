@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 
 """
-Cam Tracker Visualizer Node (Optimized UI - English)
+Cam Tracker Visualizer Node (Optimized UI with Tracking ID)
 Features:
 1. Subscribe to /usb_cam/image_raw for camera image
-2. Subscribe to /cam_tracker/info for detection info (ball and car positions)
+2. Subscribe to /cam_tracker/info for detection info (ball and car positions with IDs)
 3. Display real-time visualization with OpenCV window
 """
 
@@ -38,7 +38,7 @@ class CamTrackerVisualizer:
         rospy.Subscriber('/usb_cam/image_raw', Image, self.image_callback, queue_size=1)
         rospy.Subscriber('/cam_tracker/info', CamTrack, self.detection_callback, queue_size=1)
         
-        rospy.loginfo("=== Cam Tracker Visualizer Started ===")
+        rospy.loginfo("=== Cam Tracker Visualizer with Tracking ID ===")
         rospy.loginfo("Subscribe: /usb_cam/image_raw")
         rospy.loginfo("Subscribe: /cam_tracker/info")
         rospy.loginfo("Press 'q' to quit, 's' to save screenshot")
@@ -79,20 +79,23 @@ class CamTrackerVisualizer:
         cv2.putText(image, status_text, (50, 45), 
                    cv2.FONT_HERSHEY_DUPLEX, 0.9, status_color, 2)
         
-        # Ball count with icon
+        # Ball count with icon and tracking ID
         cv2.circle(image, (30, 85), 12, (0, 255, 255), 2)
-        cv2.putText(image, f"Ball: {det.ball_num}", (50, 95), 
+        ball_text = f"Ball: {det.ball_num}"
+        if det.ball_id >= 0:
+            ball_text += f" [ID:{det.ball_id}]"
+        cv2.putText(image, ball_text, (50, 95), 
                    cv2.FONT_HERSHEY_DUPLEX, 0.9, (0, 255, 255), 2)
         
         # Car count with icon
-        cv2.rectangle(image, (230, 73), (254, 97), (255, 0, 255), 2)
-        cv2.putText(image, f"Car: {det.car_num}", (265, 95), 
+        cv2.rectangle(image, (330, 73), (354, 97), (255, 0, 255), 2)
+        cv2.putText(image, f"Car: {det.car_num}", (365, 95), 
                    cv2.FONT_HERSHEY_DUPLEX, 0.9, (255, 0, 255), 2)
         
         # Gripper status with icon
         gripper_text = "Gripper: CLOSED" if det.in_gripper else "Gripper: OPEN"
         gripper_color = (0, 200, 255) if det.in_gripper else (150, 150, 150)
-        gripper_x = 470
+        gripper_x = 570
         # Draw simple gripper icon
         if det.in_gripper:
             cv2.rectangle(image, (gripper_x, 80), (gripper_x+10, 92), gripper_color, -1)
@@ -102,7 +105,7 @@ class CamTrackerVisualizer:
         cv2.putText(image, gripper_text, (gripper_x+30, 95), 
                    cv2.FONT_HERSHEY_DUPLEX, 0.9, gripper_color, 2)
         
-        # === Draw Ball detection (Yellow) ===
+        # === Draw Ball detection (Yellow) with Tracking ID ===
         if det.ball_num > 0:
             bx, by = int(det.ball_x), int(det.ball_y)
             
@@ -116,8 +119,12 @@ class CamTrackerVisualizer:
             cv2.line(image, (bx - line_len, by), (bx + line_len, by), (0, 255, 255), 2)
             cv2.line(image, (bx, by - line_len), (bx, by + line_len), (0, 255, 255), 2)
             
-            # Label with background
-            label = f"Ball ({bx}, {by})"
+            # Label with background - include ID
+            if det.ball_id >= 0:
+                label = f"Ball ID:{det.ball_id} ({bx}, {by})"
+            else:
+                label = f"Ball ({bx}, {by})"
+            
             (label_w, label_h), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_DUPLEX, 0.8, 2)
             label_x, label_y = bx + 55, by - 15
             # Draw background with border
@@ -128,10 +135,11 @@ class CamTrackerVisualizer:
             cv2.putText(image, label, (label_x, label_y), 
                        cv2.FONT_HERSHEY_DUPLEX, 0.8, (0, 255, 255), 2)
         
-        # === Draw Car detection (Magenta) ===
+        # === Draw Car detection (Magenta) with Tracking IDs ===
         if det.car_num > 0:
             for i in range(det.car_num):
                 cx, cy = int(det.car_x[i]), int(det.car_y[i])
+                car_id = det.car_ids[i] if i < len(det.car_ids) else -1
                 
                 # Double rectangle with glow effect
                 cv2.rectangle(image, (cx - 55, cy - 55), (cx + 55, cy + 55), (200, 0, 200), 1)
@@ -153,8 +161,12 @@ class CamTrackerVisualizer:
                 cv2.line(image, (cx + 48, cy + 48), (cx + 48 - corner_len, cy + 48), (255, 0, 255), 3)
                 cv2.line(image, (cx + 48, cy + 48), (cx + 48, cy + 48 - corner_len), (255, 0, 255), 3)
                 
-                # Label with background
-                label = f"Car#{i+1} ({cx}, {cy})"
+                # Label with background - include ID
+                if car_id >= 0:
+                    label = f"Car ID:{car_id} ({cx}, {cy})"
+                else:
+                    label = f"Car #{i+1} ({cx}, {cy})"
+                
                 (label_w, label_h), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_DUPLEX, 0.8, 2)
                 label_x, label_y = cx + 65, cy - 15
                 # Draw background with border
