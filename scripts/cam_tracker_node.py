@@ -13,6 +13,8 @@ import rospy
 import cv2
 import os
 import numpy as np
+import tempfile
+import yaml
 from sensor_msgs.msg import Image
 from std_msgs.msg import UInt8, Header
 from cv_bridge import CvBridge, CvBridgeError
@@ -23,14 +25,34 @@ from ultralytics import YOLO
 os.environ['OPENCV_LOG_LEVEL'] = 'ERROR'
 os.environ['FFMPEG_HIDE_BANNER'] = '1'
 
+# ============= Global Configuration =============
 CLASS_NAME_BALL = 'tennis-ball'
 CLASS_NAME_CAR = 'car'
+
+# Tracker Configuration
+TRACKER_TYPE = 'bytetrack'  # Options: 'bytetrack' or 'botsort'
+ENABLE_REID = False  # Enable Re-Identification (ReID) for better tracking through occlusions
+REID_MODEL = 'auto'  # Options: 'auto', 'yolo11n-cls.pt', 'yolo11s-cls.pt', or path to custom model
+
+# Tracker Thresholds (can be overridden via ROS params)
+TRACK_HIGH_THRESH = 0.5  # High confidence threshold for first association
+TRACK_LOW_THRESH = 0.1   # Low confidence threshold for second association
+NEW_TRACK_THRESH = 0.6   # Threshold for initializing new tracks
+TRACK_BUFFER = 30        # Number of frames to keep lost tracks alive
+MATCH_THRESH = 0.8       # Threshold for matching tracks
+PROXIMITY_THRESH = 0.5   # Minimum IoU for ReID matching (BoTSORT only)
+APPEARANCE_THRESH = 0.25 # Minimum appearance similarity for ReID (BoTSORT only)
+
+# GMC (Global Motion Compensation) method for camera motion compensation
+GMC_METHOD = 'sparseOptFlow'  # Options: 'orb', 'sift', 'ecc', 'sparseOptFlow', None
+# ================================================
+
 
 class CamTrackerNode:
     def __init__(self):
         """初始化Cam Tracker节点"""
         rospy.init_node('cam_tracker_node', anonymous=True)
-        rospy.loginfo("=== Cam Tracker Node with ByteTracker ===")
+        rospy.loginfo("=== Cam Tracker Node with Advanced Tracking ===")
         
         # 控制模式: 0=停止, 1=抓取区(ball), 2=释放区(car)
         self.control_mode = 0
@@ -52,15 +74,32 @@ class CamTrackerNode:
         self.confidence_threshold = rospy.get_param('~confidence_threshold', 0.5)
         rospy.loginfo(f"Confidence threshold: {self.confidence_threshold}")
         
-        # 追踪参数
-        self.tracker_type = rospy.get_param('~tracker_type', 'bytetrack')  # 'bytetrack' or 'botsort'
+        # 追踪参数 - 优先使用ROS参数，否则使用全局配置
+        self.tracker_type = rospy.get_param('~tracker_type', TRACKER_TYPE)
+        # 确保 tracker_type 不包含 .yaml 后缀（去掉如果有的话）
+        if self.tracker_type.endswith('.yaml'):
+            self.tracker_type = self.tracker_type[:-5]
+        
+        self.enable_reid = rospy.get_param('~enable_reid', ENABLE_REID)
+        self.reid_model = rospy.get_param('~reid_model', REID_MODEL)
+        
         rospy.loginfo(f"Tracker type: {self.tracker_type}")
+        rospy.loginfo(f"ReID enabled: {self.enable_reid}")
+        if self.enable_reid:
+            rospy.loginfo(f"ReID model: {self.reid_model}")
+            if self.tracker_type != 'botsort':
+                rospy.logwarn("⚠ ReID is only supported by BoTSORT tracker!")
+                rospy.logwarn("  Switching to BoTSORT tracker...")
+                self.tracker_type = 'botsort'
+        
+        # 创建自定义追踪器配置文件
+        self.tracker_config_path = self.create_tracker_config_file()
         
         # Ball追踪状态
         self.current_ball_id = None  # 当前追踪的ball ID
         self.last_ball_position = None  # 上一次ball的位置 (x, y)
         self.ball_id_lost_frames = 0  # ID丢失的帧数
-        self.max_lost_frames = 10  # 最大允许丢失帧数
+        self.max_lost_frames = rospy.get_param('~max_lost_frames', 10)
         
         # ROS订阅和发布
         camera_topic = rospy.get_param('~camera_topic', '/usb_cam/image_raw')
@@ -74,6 +113,43 @@ class CamTrackerNode:
         self.info_pub = rospy.Publisher('/cam_tracker/info', CamTrack, queue_size=10)
         
         rospy.loginfo("=== Node initialized, waiting for control signal ===")
+    
+    def create_tracker_config_file(self):
+        """创建自定义追踪器配置文件"""
+        # 获取ROS参数或使用全局默认值
+        # 注意：tracker_type 必须是 'bytetrack' 或 'botsort'，不能包含 .yaml 后缀
+        config = {
+            'tracker_type': self.tracker_type,  # 'bytetrack' or 'botsort'
+            'track_high_thresh': rospy.get_param('~track_high_thresh', TRACK_HIGH_THRESH),
+            'track_low_thresh': rospy.get_param('~track_low_thresh', TRACK_LOW_THRESH),
+            'new_track_thresh': rospy.get_param('~new_track_thresh', NEW_TRACK_THRESH),
+            'track_buffer': rospy.get_param('~track_buffer', TRACK_BUFFER),
+            'match_thresh': rospy.get_param('~match_thresh', MATCH_THRESH),
+            'gmc_method': rospy.get_param('~gmc_method', GMC_METHOD),
+            'fuse_score': True
+        }
+        
+        # BoTSORT特定参数
+        if self.tracker_type == 'botsort':
+            config['with_reid'] = self.enable_reid
+            if self.enable_reid:
+                config['proximity_thresh'] = rospy.get_param('~proximity_thresh', PROXIMITY_THRESH)
+                config['appearance_thresh'] = rospy.get_param('~appearance_thresh', APPEARANCE_THRESH)
+                config['model'] = self.reid_model
+        
+        rospy.loginfo("Tracker configuration:")
+        for key, value in config.items():
+            rospy.loginfo(f"  {key}: {value}")
+        
+        # 创建临时YAML配置文件
+        temp_dir = tempfile.gettempdir()
+        config_path = os.path.join(temp_dir, f'ros_custom_{self.tracker_type}.yaml')
+        
+        with open(config_path, 'w') as f:
+            yaml.dump(config, f, default_flow_style=False)
+        
+        rospy.loginfo(f"Tracker config saved to: {config_path}")
+        return config_path
     
     def find_model_path(self):
         """查找YOLO模型文件"""
@@ -115,9 +191,9 @@ class CamTrackerNode:
         if mode == 0:
             rospy.loginfo("[Control] Stop detection")
         elif mode == 1:
-            rospy.loginfo("[Control] Pickup mode - Track ball with ByteTracker")
+            rospy.loginfo(f"[Control] Pickup mode - Track ball with {self.tracker_type.upper()}")
         elif mode == 2:
-            rospy.loginfo("[Control] Release mode - Track car with ByteTracker")
+            rospy.loginfo(f"[Control] Release mode - Track car with {self.tracker_type.upper()}")
         else:
             rospy.logwarn(f"[Control] Unknown mode: {mode}")
     
@@ -140,10 +216,11 @@ class CamTrackerNode:
             
             # YOLO检测 + 追踪
             # persist=True 保持追踪器状态在帧之间
+            # tracker参数指向自定义配置文件
             results = self.model.track(
                 cv_image,
                 conf=self.confidence_threshold,
-                tracker=self.tracker_type,
+                tracker=self.tracker_config_path,
                 persist=True,
                 verbose=False
             )
